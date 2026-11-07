@@ -72,22 +72,39 @@ export const useAssistant = defineStore('assistant', {
     log: (restored?.log ?? []) as LogEntry[],
     task: (restored?.task ?? null) as TaskProgress | null,
     llmState: 'loading' as 'missing' | 'loading' | 'ready' | 'unavailable',
+    /** 模型下載或載入進度（0–100），App 有提供時才有值 */
+    llmProgress: null as number | null,
+    /** 裝置不支援離線語音辨識或沒有麥克風權限：改用任務大按鈕 */
+    voiceUnavailable: false,
     /** 連續聽不懂的次數，第二次就顯示任務大按鈕 */
     misses: 0,
   }),
 
   getters: {
-    showTaskButtons: (state) => state.misses >= 2 || state.llmState !== 'ready',
+    showTaskButtons: (state) => state.misses >= 2 || state.llmState !== 'ready' || state.voiceUnavailable,
   },
 
   actions: {
-    /** 網頁一打開就預熱模型 */
+    /**
+     * 網頁一打開就預熱模型。App 收到 llm_status 會立刻回目前狀態並在背景載入，
+     * 所以這裡每 2 秒問一次，直到 ready 或 missing（手機上沒有模型檔）。
+     */
     async init() {
-      try {
-        this.llmState = await bridge.llmStatus();
-      } catch {
-        this.llmState = 'unavailable';
+      const deadline = Date.now() + 10 * 60 * 1000;
+      while (Date.now() < deadline) {
+        try {
+          const { state, progress } = await bridge.llmStatus();
+          this.llmState = state;
+          this.llmProgress = progress;
+          if (state !== 'loading') return;
+        } catch {
+          // App 沒有 llm_status Handler（例如還沒合併）：當成模型不可用，改用關鍵字
+          this.llmState = 'unavailable';
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
+      this.llmState = 'unavailable';
     },
 
     async say(text: string) {
@@ -110,7 +127,9 @@ export const useAssistant = defineStore('assistant', {
         const text = await bridge.listen((partial) => (this.caption = partial));
         if (text) this.log.push({ role: 'user', text });
         return text;
-      } catch {
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === 'unavailable' || code === 'permission') this.voiceUnavailable = true;
         return '';
       } finally {
         this.phase = 'idle';
@@ -121,7 +140,13 @@ export const useAssistant = defineStore('assistant', {
     async talk() {
       if (this.phase !== 'idle') return this.stop();
 
+      if (this.voiceUnavailable) {
+        return this.say('這支手機目前沒辦法離線聽寫，請直接按下面的按鈕選擇要辦的事。');
+      }
       const text = await this.listen();
+      if (this.voiceUnavailable) {
+        return this.say('這支手機目前沒辦法離線聽寫，請直接按下面的按鈕選擇要辦的事。');
+      }
       if (!text) return this.say('我沒有聽到，請再按一次按鈕說話。');
 
       this.phase = 'thinking';
@@ -154,10 +179,10 @@ export const useAssistant = defineStore('assistant', {
         while (!slots[key] && tries < 2) {
           await this.say(spec.ask);
           const reply = await this.listen();
-          // 「停止」「再說一次」要先判斷，不能當成欄位的值
+          // 先判斷「停止」「再說一次」，不是指令才當成答案（規則見 agent/keywords.ts）
           const command = reply ? matchCommand(reply) : null;
-          if (command === 'stop') return this.say('好的，已經取消。');
-          if (command === 'repeat') continue; // 回到迴圈開頭重念 spec.ask，不算一次嘗試
+          if (command === 'stop') return this.say('好的，先停在這裡，需要時再按按鈕叫我。');
+          if (command === 'repeat') continue; // 重念問題，不算聽不懂
           const value = reply ? normalizeSlot(script, key, reply) : null;
           if (value) slots[key] = value;
           tries += 1;
@@ -176,7 +201,7 @@ export const useAssistant = defineStore('assistant', {
         this.task.status = 'done';
         this.task.result = describeResult(script.id, result);
         this.phase = 'idle';
-        if (this.task.result) await this.say(this.task.result);
+        // 結果由 App 的 run_task 朗讀，網頁只顯示，不重念
       } catch (error) {
         const code = (error as { code?: string }).code;
         this.task.status = code === 'stopped' ? 'stopped' : 'failed';

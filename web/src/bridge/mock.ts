@@ -116,6 +116,8 @@ async function mockRunTask(data: Record<string, unknown>, options: RequestOption
 
 // ---- 進入點 ----
 
+let mockStatusCalls = 0;
+
 export function mockRequest(name: string, data: Record<string, unknown>, options: RequestOptions): Promise<BridgeReply> {
   switch (name) {
     case 'voice_listen':
@@ -123,7 +125,13 @@ export function mockRequest(name: string, data: Record<string, unknown>, options
     case 'tts_speak':
       return mockSpeak(String(data.text ?? ''), data.rate as number | undefined);
     case 'llm_status':
-      return Promise.resolve({ status: 'done', state: 'ready' });
+      // 模擬 App：前兩次回「載入中」，之後 ready，用來測網頁的輪詢
+      mockStatusCalls += 1;
+      return Promise.resolve(
+        mockStatusCalls < 3
+          ? { status: 'done', state: 'loading', progress: mockStatusCalls * 40 }
+          : { status: 'done', state: 'ready' },
+      );
     case 'llm_ask':
       return mockAsk(data, options);
     case 'run_task':
