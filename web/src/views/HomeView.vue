@@ -6,6 +6,7 @@ import { scripts } from '../agent';
 import { inApp } from '../bridge';
 import TaskCard from '../components/TaskCard.vue';
 import MockSpeechInput from '../components/MockSpeechInput.vue';
+import AppIcon from '../components/AppIcon.vue';
 
 const assistant = useAssistant();
 onMounted(() => assistant.init());
@@ -15,24 +16,25 @@ assistant.$subscribe((_, state) => save(state));
 const busy = computed(() => assistant.phase !== 'idle');
 const micLabel = computed(() => (busy.value ? '停止' : '按這裡說話'));
 
-const phaseIcon: Record<string, string> = {
-  idle: '🎙️',
-  listening: '👂',
-  thinking: '💭',
-  speaking: '🔊',
-  running: '🤖',
-};
+/** 有選項按鈕時，狀態列提醒也可以用按的 */
+const statusText = computed(() =>
+  assistant.choices.length && assistant.phase === 'listening' ? '聆聽中，請說話或按下方按鈕' : phaseLabel[assistant.phase],
+);
 </script>
 
 <template>
   <!-- 頁面左右邊距 16px，與城市通各頁一致 -->
-  <main class="mx-auto flex min-h-dvh max-w-xl flex-col gap-4 px-4 pt-4 pb-40">
+  <!-- 底部操作列有選項按鈕時會變高，下方留白跟著加大，內容才不會被擋住 -->
+  <main
+    class="mx-auto flex min-h-dvh max-w-xl flex-col gap-4 px-4 pt-4"
+    :class="assistant.choices.length ? 'pb-96' : 'pb-40'"
+  >
     <!-- App 的標題列已經顯示服務名稱，這裡的標題給螢幕閱讀器用 -->
     <h1 class="sr-only">AI 語音助手</h1>
 
     <!-- 沒有網路：AI 推論在手機上，仍可使用 -->
     <p v-if="!isOnline" class="tp-card flex gap-3 border-l-4 border-secondary-500 text-lg leading-relaxed" role="status">
-      <span aria-hidden="true">📶</span>
+      <AppIcon name="offline" class="mt-1 text-secondary-700" />
       <span><strong>目前沒有網路。</strong>您仍然可以問我問題；查詢停車費等服務需要網路。</span>
     </p>
 
@@ -43,8 +45,7 @@ const phaseIcon: Record<string, string> = {
       role="status"
       aria-live="polite"
     >
-      <span aria-hidden="true">{{ phaseIcon[assistant.phase] }}</span>
-      {{ phaseLabel[assistant.phase] }}
+      {{ statusText }}
     </p>
 
     <!-- 模型狀態：載入中提示進度；評審問「AI 在哪裡跑」時也看得到 -->
@@ -123,6 +124,21 @@ const phaseIcon: Record<string, string> = {
     class="fixed inset-x-0 bottom-0 bg-white px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-2px_6px_rgb(0_0_0/0.08)]"
   >
     <div class="mx-auto flex max-w-xl flex-col gap-3">
+      <!-- 選項按鈕：按下等於說出按鈕上的字。兩個選項並排，三個以上（付款方式）直排，長字才放得下 -->
+      <section v-if="assistant.choices.length" aria-labelledby="choices-title">
+        <h2 id="choices-title" class="mb-2 text-base font-semibold text-grayscale-700">也可以直接按</h2>
+        <div class="grid gap-3" :class="assistant.choices.length === 2 ? 'grid-cols-2' : 'grid-cols-1'">
+          <button
+            v-for="choice in assistant.choices"
+            :key="choice"
+            type="button"
+            class="tp-btn-secondary text-xl"
+            @click="assistant.pickChoice(choice)"
+          >
+            {{ choice }}
+          </button>
+        </div>
+      </section>
       <MockSpeechInput v-if="!inApp" />
       <!-- 主按鈕：整排寬、高 72px，手部不便也容易按到 -->
       <button
@@ -131,7 +147,6 @@ const phaseIcon: Record<string, string> = {
         :class="busy ? 'tp-btn-danger' : 'tp-btn-primary'"
         @click="assistant.talk()"
       >
-        <span aria-hidden="true">{{ busy ? '⏹' : '🎙️' }}</span>
         {{ micLabel }}
       </button>
     </div>
