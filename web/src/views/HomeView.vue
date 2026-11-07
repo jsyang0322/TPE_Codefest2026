@@ -10,7 +10,7 @@ const assistant = useAssistant();
 onMounted(() => assistant.init());
 
 const busy = computed(() => assistant.phase !== 'idle');
-const micLabel = computed(() => (busy.value ? '停止' : '按我說話'));
+const micLabel = computed(() => (busy.value ? '停止' : '按這裡說話'));
 
 const phaseIcon: Record<string, string> = {
   idle: '🎙️',
@@ -22,14 +22,15 @@ const phaseIcon: Record<string, string> = {
 </script>
 
 <template>
-  <main class="mx-auto flex min-h-dvh max-w-xl flex-col gap-4 px-4 pt-4 pb-44">
+  <!-- 頁面左右邊距 16px，與城市通各頁一致 -->
+  <main class="mx-auto flex min-h-dvh max-w-xl flex-col gap-4 px-4 pt-4 pb-40">
     <!-- App 的標題列已經顯示服務名稱，這裡的標題給螢幕閱讀器用 -->
     <h1 class="sr-only">AI 語音助手</h1>
 
     <!-- 目前狀態：文字＋圖示，不用閃爍動畫 -->
     <p
-      class="flex items-center gap-2 self-start rounded-full px-4 py-2 text-base font-semibold"
-      :class="busy ? 'bg-secondary-100 text-grayscale-800' : 'bg-primary-100 text-primary-900'"
+      class="tp-tag self-start"
+      :class="busy ? 'bg-secondary-100 text-secondary-800' : 'bg-primary-100 text-primary-700'"
       role="status"
       aria-live="polite"
     >
@@ -38,15 +39,11 @@ const phaseIcon: Record<string, string> = {
     </p>
 
     <!-- 字幕：使用者說的話、助手念的話都顯示在這裡（聽障者也能使用） -->
-    <section
-      class="min-h-32 rounded-2xl bg-white p-5 shadow-sm"
-      aria-label="字幕"
-      aria-live="polite"
-    >
+    <section class="tp-card min-h-32 p-5" aria-label="字幕" aria-live="polite">
       <p v-if="assistant.caption" class="text-2xl leading-relaxed font-semibold break-words">
         {{ assistant.caption }}
       </p>
-      <p v-else class="text-xl leading-relaxed text-grayscale-500">
+      <p v-else class="text-xl leading-relaxed text-grayscale-600">
         您可以說：「幫我查停車費，車號 ABC 123」
       </p>
     </section>
@@ -60,7 +57,7 @@ const phaseIcon: Record<string, string> = {
         v-for="script in scripts"
         :key="script.id"
         type="button"
-        class="min-h-14 rounded-2xl border-2 border-primary-500 bg-white px-5 text-left text-xl font-semibold text-primary-900 active:bg-primary-50 disabled:opacity-50"
+        class="tp-btn-secondary justify-start text-left text-xl"
         :disabled="busy"
         @click="assistant.runScript(script)"
       >
@@ -75,8 +72,8 @@ const phaseIcon: Record<string, string> = {
         <li
           v-for="(entry, index) in assistant.log"
           :key="index"
-          class="max-w-[85%] rounded-2xl px-4 py-3 text-lg leading-relaxed"
-          :class="entry.role === 'user' ? 'self-end bg-primary-500 text-white' : 'self-start bg-white'"
+          class="max-w-[85%] rounded-[10px] px-4 py-3 text-lg leading-relaxed"
+          :class="entry.role === 'user' ? 'self-end bg-primary-700 text-white' : 'self-start bg-white shadow-card'"
         >
           <span class="sr-only">{{ entry.role === 'user' ? '您說：' : '助手說：' }}</span>
           {{ entry.text }}
@@ -85,18 +82,22 @@ const phaseIcon: Record<string, string> = {
     </section>
   </main>
 
-  <!-- 固定在底部的大按鈕 -->
-  <footer class="fixed inset-x-0 bottom-0 flex flex-col items-center gap-3 bg-gradient-to-t from-grayscale-50 via-grayscale-50 to-transparent px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-    <MockSpeechInput v-if="!inApp" />
-    <button
-      type="button"
-      class="flex size-28 flex-col items-center justify-center rounded-full text-white shadow-lg active:scale-95"
-      :class="busy ? 'bg-danger-500' : 'bg-primary-500'"
-      :aria-label="micLabel"
-      @click="assistant.talk()"
-    >
-      <span class="text-4xl" aria-hidden="true">{{ busy ? '⏹' : '🎙️' }}</span>
-      <span class="text-base font-semibold">{{ micLabel }}</span>
-    </button>
+  <!-- 底部操作列：與城市通底部按鈕列相同的白底＋上方陰影 -->
+  <footer
+    class="fixed inset-x-0 bottom-0 bg-white px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-2px_6px_rgb(0_0_0/0.08)]"
+  >
+    <div class="mx-auto flex max-w-xl flex-col gap-3">
+      <MockSpeechInput v-if="!inApp" />
+      <!-- 主按鈕：整排寬、高 72px，手部不便也容易按到 -->
+      <button
+        type="button"
+        class="min-h-18 gap-3 text-2xl"
+        :class="busy ? 'tp-btn-danger' : 'tp-btn-primary'"
+        @click="assistant.talk()"
+      >
+        <span aria-hidden="true">{{ busy ? '⏹' : '🎙️' }}</span>
+        {{ micLabel }}
+      </button>
+    </div>
   </footer>
 </template>

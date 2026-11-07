@@ -1,26 +1,52 @@
 @import 'tailwindcss';
 
-/* 城市通設計規範色票（AGENTS.md「設計規範」） */
+/*
+ * 城市通設計規範。數值取自 TownPass 原始碼（照 Figma Town Pass UI Kit 實作）：
+ * 色票 lib/util/tp_colors.dart、按鈕 tp_button.dart、卡片 tp_card.dart、字級 tp_text_styles.dart
+ */
 @theme {
-  --color-primary-50: #eef8fa;
-  --color-primary-100: #d5eef2;
+  --color-primary-50: #edf8fa;
+  --color-primary-100: #dbf1f5;
+  --color-primary-200: #b4e2ea;
   --color-primary-500: #5ab4c5;
-  --color-primary-700: #3a8797;
-  --color-primary-900: #23525c;
-  --color-secondary-100: #fdf1db;
+  --color-primary-600: #468d9b;
+  --color-primary-700: #356c77;
+  --color-primary-800: #22474e;
+
+  --color-secondary-50: #fdf8ed;
+  --color-secondary-100: #fcf2df;
   --color-secondary-500: #f5ba4b;
-  --color-grayscale-50: #f4f6f7;
-  --color-grayscale-200: #d7dee2;
+  --color-secondary-700: #ad7b2b;
+  --color-secondary-800: #74521b;
+
+  --color-grayscale-50: #f1f3f4;
+  --color-grayscale-100: #e3e7e9;
+  --color-grayscale-200: #cad1d5;
   --color-grayscale-500: #738995;
-  --color-grayscale-800: #2c3a42;
-  --color-danger-500: #d9534f;
+  --color-grayscale-600: #5e6d76;
+  --color-grayscale-700: #475259;
+  --color-grayscale-800: #30383d;
+
+  --color-red-50: #faeeee;
+  --color-red-300: #e29494;
+  --color-red-500: #d45251;
+  --color-red-600: #c2332f;
+
+  --color-orange-300: #f4b992;
+
+  /* TPCard 陰影 */
+  --shadow-card: 0 4px 12px 0 rgb(0 0 0 / 0.04);
 
   /* 不載入網路字型：iOS 有 PingFang TC，其他平台用系統字型 */
   --font-sans: 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', Roboto, system-ui, sans-serif;
 }
 
 html {
-  /* 長輩取向：內文以 18px 為基準，全部用 rem，系統字級放大時跟著放大 */
+  /*
+   * 長輩取向：以 18px（UI Kit 的 title）為內文基準，全部用 rem。
+   * UI Kit 原字級 h1 36、h2 24、title 18、h3 16、body 14、caption 12，
+   * 本服務整體放大一級，最小字不低於 16px。
+   */
   font-size: 112.5%;
   -webkit-text-size-adjust: 100%;
 }
@@ -29,7 +55,39 @@ body {
   @apply bg-grayscale-50 font-sans text-grayscale-800 antialiased;
 }
 
-/* 鍵盤操作時看得到焦點 */
+/* 卡片：TPCard */
+@utility tp-card {
+  @apply rounded-lg bg-white p-4 shadow-card;
+}
+
+/* 按鈕：TPButton。圓角 10；長輩取向，高度至少 56px（無障礙規範最低 48px） */
+@utility tp-btn {
+  @apply flex min-h-14 items-center justify-center rounded-[10px] px-4 py-2 text-lg font-semibold;
+  &:disabled {
+    @apply border-transparent bg-grayscale-100 text-grayscale-500;
+  }
+}
+/*
+ * 對比度：UI Kit 的 primary500 配白字只有 2.39:1，未達 WCAG AA（一般文字 4.5:1、大字 3:1）。
+ * 本服務對象是長輩與視障者，有文字的地方改用同色系較深的色階：
+ * primary700 配白字 5.89:1、red600 配白字 5.51:1。
+ */
+@utility tp-btn-primary {
+  @apply tp-btn bg-primary-700 text-white active:bg-primary-800;
+}
+@utility tp-btn-secondary {
+  @apply tp-btn border-2 border-primary-600 bg-white text-primary-700 active:bg-primary-50;
+}
+@utility tp-btn-danger {
+  @apply tp-btn bg-red-600 text-white active:bg-red-500;
+}
+
+/* 標籤 */
+@utility tp-tag {
+  @apply inline-flex items-center gap-2 rounded-[10px] px-3 py-1.5 text-base font-semibold;
+}
+
+/* 鍵盤或切換控制操作時看得到焦點 */
 :focus-visible {
   outline: 3px solid var(--color-secondary-500);
   outline-offset: 2px;
