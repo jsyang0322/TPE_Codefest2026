@@ -33,10 +33,18 @@ test('圖書館：書名去掉副題，最多唸三本', () => {
   // 示範服務站搜尋「神奇柑仔店」實際讀回的資料
   assert.equal(
     describeResult('library_search', { books: ['歡迎光臨錢天堂 : 神奇柑仔店大圖鑑', '神奇柑仔店. 15, 冒牌的長髮公主餅乾'] }),
-    '先列出 2 本，有《歡迎光臨錢天堂》、《神奇柑仔店. 15, 冒牌的長髮公主餅乾》。',
+    '館藏裡找到 2 本，有《歡迎光臨錢天堂》、《神奇柑仔店. 15, 冒牌的長髮公主餅乾》。',
   );
-  assert.equal(describeResult('library_search', { books: ['A', 'B', 'C', 'D'] }), '先列出 4 本，有《A》、《B》、《C》等。');
+  assert.equal(describeResult('library_search', { books: ['A', 'B', 'C', 'D'] }), '館藏裡找到 4 本，有《A》、《B》、《C》等。');
   assert.equal(describeResult('library_search', { books: [] }), '沒有找到相關的書，可以換個書名或作者再試一次。');
+  // 關鍵字過濾（搜尋頁沒有功能，改由網頁端過濾首頁書單）
+  assert.equal(
+    describeResult('library_search', { books: ['歡迎光臨錢天堂 : 神奇柑仔店大圖鑑', '底層邏輯'] }, { keyword: '柑仔店' }),
+    '館藏裡找到 1 本，有《歡迎光臨錢天堂》。',
+  );
+  assert.ok(
+    describeResult('library_search', { books: ['底層邏輯'] }, { keyword: '東野圭吾' }).includes('沒有找到「東野圭吾」'),
+  );
 });
 
 test('臨櫃叫號：去掉號碼前面的 0', () => {

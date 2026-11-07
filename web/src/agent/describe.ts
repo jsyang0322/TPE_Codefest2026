@@ -37,11 +37,16 @@ function shortTitle(title: string): string {
   return title.split(/\s[:=]\s/)[0].trim();
 }
 
-function describeBooks(books: string[]): string {
-  if (books.length === 0) return '沒有找到相關的書，可以換個書名或作者再試一次。';
-  const names = books.slice(0, 3).map((title) => `《${shortTitle(title)}》`).join('、');
-  // 讀到的是頁面上列出的筆數，不一定是全部館藏，所以說「先列出」
-  return `先列出 ${books.length} 本，有${names}${books.length > 3 ? '等' : ''}。`;
+function describeBooks(books: string[], keyword?: string): string {
+  // 示範站的搜尋頁沒有功能，腳本改讀首頁書單，再用關鍵字在這裡過濾
+  const hits = keyword ? books.filter((title) => title.includes(keyword)) : books;
+  if (hits.length === 0) {
+    return keyword
+      ? `目前的館藏裡沒有找到「${keyword}」相關的書，可以換個書名或作者再試一次。`
+      : '沒有找到相關的書，可以換個書名或作者再試一次。';
+  }
+  const names = hits.slice(0, 3).map((title) => `《${shortTitle(title)}》`).join('、');
+  return `館藏裡找到 ${hits.length} 本，有${names}${hits.length > 3 ? '等' : ''}。`;
 }
 
 /** 櫃檯一列：「綜合受理|0379號 等候0」 */
@@ -69,7 +74,11 @@ export function resultVars(scriptId: string, result: Record<string, unknown>): R
 }
 
 /** 依腳本 id 把結果轉成一句話；沒有專用規則的腳本，把文字結果串起來 */
-export function describeResult(scriptId: string, result: Record<string, unknown>): string {
+export function describeResult(
+  scriptId: string,
+  result: Record<string, unknown>,
+  slots: Record<string, string> = {},
+): string {
   if (scriptId === 'parking_fee' && Array.isArray(result.bills)) {
     return describeBills(result.bills as Bill[]);
   }
@@ -77,7 +86,7 @@ export function describeResult(scriptId: string, result: Record<string, unknown>
     return describeReceipt(result.receipt as Bill);
   }
   if (scriptId === 'library_search' && Array.isArray(result.books)) {
-    return describeBooks(result.books.map(String));
+    return describeBooks(result.books.map(String), slots.keyword);
   }
   if (scriptId === 'counter_calling' && Array.isArray(result.counters)) {
     return describeCounters(result.counters.map(String));
