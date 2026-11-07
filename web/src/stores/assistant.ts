@@ -430,6 +430,7 @@ export const useAssistant = defineStore('assistant', {
       this.hideChoices();
       bridge.stopListening();
       bridge.stopSpeaking();
+      bridge.stopAsk();
       if (this.phase === 'running') bridge.stopTask();
       this.phase = 'idle';
     },

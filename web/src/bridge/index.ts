@@ -122,12 +122,20 @@ export const bridge = {
       progress: typeof r.progress === 'number' ? r.progress : null,
       message: typeof r.message === 'string' ? r.message : null,
     })),
-  /** timeoutMs：網頁最多等多久；逾時後 App 端的推論不會停（llm_ask 沒有停止動作） */
+  /** timeoutMs：網頁最多等多久；逾時會順便叫 App 中止推論，避免 Gemma 在背景跑完、下一問拿到 busy */
   ask: (system: string, prompt: string, onPartial?: (text: string) => void, maxTokens = 150, timeoutMs = 60000) =>
     request('llm_ask', { system, prompt, maxTokens }, {
       timeoutMs,
       onPartial: (r) => onPartial?.(String(r.text ?? '')),
-    }).then((r) => String(r.text ?? '')),
+    }).then(
+      (r) => String(r.text ?? ''),
+      (error) => {
+        if ((error as { code?: string })?.code === 'timeout') send('llm_ask', { action: 'stop' });
+        throw error;
+      },
+    ),
+  /** 中止進行中的 LLM 推論（使用者按停止時由 store 呼叫） */
+  stopAsk: () => send('llm_ask', { action: 'stop' }),
 
   runTask: (script: TaskScript, slots: Record<string, string>, onStep?: (step: number, say: string) => void) =>
     request('run_task', { script, slots }, {
