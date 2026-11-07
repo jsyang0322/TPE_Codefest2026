@@ -11,8 +11,8 @@ const parkingFeePay = load('parking_fee_pay');
 const followUps = { parking_fee_pay: parkingFeePay };
 
 const bills = [
-  { 繳費期限: '2024/12/31', 繳費金額: 'NT$60' },
-  { 繳費期限: '2025/01/14', 繳費金額: 'NT$150' },
+  { 繳費期限: '2024/12/31', 繳費金額: 'NT$60', 車號: 'ABC–123' }, // en dash，模擬畫面實況
+  { 繳費期限: '2025/01/14', 繳費金額: 'NT$150', 車號: 'ABC–123' },
 ];
 
 test('查到帳單：接著問要不要繳，車種車號帶過去', () => {
@@ -30,6 +30,10 @@ test('查到帳單：接著問要不要繳，車種車號帶過去', () => {
 test('沒有帳單就不問', () => {
   assert.equal(planFollowUp(parkingFee, { bills: [] }, {}, followUps), null);
   assert.equal(planFollowUp(parkingFee, {}, {}, followUps), null);
+});
+
+test('車號不符就不問：示範站查 XYZ-999 也回 ABC-123 的帳單', () => {
+  assert.equal(planFollowUp(parkingFee, { bills }, { vehicle: '汽車', plate: 'XYZ-999' }, followUps), null);
 });
 
 test('沒有 next 的腳本、找不到接續腳本都回傳 null', () => {

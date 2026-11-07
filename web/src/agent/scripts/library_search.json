@@ -8,6 +8,6 @@
     { "open": "https://taipei-pass-service.vercel.app/library-service/" },
     { "say": "正在幫您查詢館藏" },
     { "read": { "selector": "a.item h5", "all": true, "timeoutMs": 5000, "as": "books" } },
-    { "stop": "目前的館藏已經列在畫面上，點書名可以看詳細資料。" }
+    { "stop": "查詢完成。" }
   ]
 }
