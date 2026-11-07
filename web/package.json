@@ -8,6 +8,7 @@
     "dev": "vite --host",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview --host",
+    "test": "node --test \"src/**/*.test.ts\"",
     "deploy:dev": "npm run build && firebase hosting:channel:deploy dev",
     "deploy": "npm run build && firebase deploy --only hosting"
   },
