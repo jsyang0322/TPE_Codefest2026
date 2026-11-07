@@ -5,11 +5,9 @@
     "keyword": { "ask": "請問要找什麼書？可以說書名或作者。", "label": "書名或作者" }
   },
   "steps": [
-    { "open": "https://taipei-pass-service.vercel.app/library-service/keyword-search" },
+    { "open": "https://taipei-pass-service.vercel.app/library-service/" },
     { "say": "正在幫您查詢館藏" },
-    { "fill": { "near": "輸入關鍵字", "value": "{keyword}" }, "say": "搜尋 {keyword}" },
-    { "click": { "selector": ".search-button" } },
-    { "read": { "selector": "a.item h5", "all": true, "timeoutMs": 3000, "as": "books" } },
-    { "stop": "查到的書已經列在畫面上，點書名可以看在哪一間圖書館。" }
+    { "read": { "selector": "a.item h5", "all": true, "timeoutMs": 5000, "as": "books" } },
+    { "stop": "目前的館藏已經列在畫面上，點書名可以看詳細資料。" }
   ]
 }

@@ -415,7 +415,7 @@ export const useAssistant = defineStore('assistant', {
         });
         const result = (reply.result ?? {}) as Record<string, unknown>;
         task.status = 'done';
-        task.result = describeResult(script.id, result);
+        task.result = describeResult(script.id, result, slots);
         this.phase = 'idle';
         // 摘要句（查到 N 筆共 X 元）只有網頁算得出來，由網頁念；
         // 腳本的 stop 已改成短句「查詢完成」，App 端不會重複念到內容
