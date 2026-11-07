@@ -5,6 +5,7 @@ import { defineStore } from 'pinia';
 import { bridge } from '../bridge';
 import type { TaskScript } from '../bridge/types';
 import { answer, describeResult, matchCommand, normalizeSlot, understand } from '../agent';
+import { isOnline } from '../composables/online';
 
 export type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'running';
 
@@ -16,7 +17,8 @@ export interface LogEntry {
 export interface TaskProgress {
   description: string;
   steps: string[];
-  status: 'running' | 'done' | 'failed' | 'stopped';
+  /** interrupted：執行途中助手頁被 iOS 回收、重新載入，不知道結果 */
+  status: 'running' | 'done' | 'failed' | 'stopped' | 'interrupted';
   result?: string;
 }
 
@@ -28,13 +30,47 @@ export const phaseLabel: Record<Phase, string> = {
   running: 'AI 操作中',
 };
 
+// ---- 保存對話狀態 ----
+// 執行腳本時助手頁在背景，iOS 記憶體不夠會回收它；回來時頁面重新載入，靠 sessionStorage 還原。
+// sessionStorage 只存在這次開啟的 WebView，關掉服務就清空，不會留下個資。
+
+const STORAGE_KEY = 'tp-voice-assistant';
+
+interface Saved {
+  log: LogEntry[];
+  task: TaskProgress | null;
+  caption: string;
+}
+
+function load(): Saved | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as Saved;
+    if (saved.task?.status === 'running') saved.task.status = 'interrupted';
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+export function save(state: Saved) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ log: state.log, task: state.task, caption: state.caption }));
+  } catch {
+    // 無痕模式或儲存空間滿了：不保存，功能照常
+  }
+}
+
+const restored = load();
+
 export const useAssistant = defineStore('assistant', {
   state: () => ({
     phase: 'idle' as Phase,
     /** 正在說的話（即時字幕）或助手正在念的話 */
-    caption: '',
-    log: [] as LogEntry[],
-    task: null as TaskProgress | null,
+    caption: restored?.caption ?? '',
+    log: (restored?.log ?? []) as LogEntry[],
+    task: (restored?.task ?? null) as TaskProgress | null,
     llmState: 'loading' as 'missing' | 'loading' | 'ready' | 'unavailable',
     /** 連續聽不懂的次數，第二次就顯示任務大按鈕 */
     misses: 0,
@@ -110,6 +146,9 @@ export const useAssistant = defineStore('assistant', {
 
     /** 任務大按鈕或 talk() 呼叫：補齊關鍵字後執行腳本 */
     async runScript(script: TaskScript, slots: Record<string, string> = {}) {
+      if (!isOnline.value) {
+        return this.say('目前沒有網路，沒辦法打開服務頁。您還是可以問我規定相關的問題。');
+      }
       for (const [key, spec] of Object.entries(script.slots)) {
         let tries = 0;
         while (!slots[key] && tries < 2) {
@@ -144,6 +183,15 @@ export const useAssistant = defineStore('assistant', {
         this.phase = 'idle';
         if (code === 'offline') await this.say('目前沒有網路，沒辦法打開服務頁。');
       }
+    },
+
+    /** 清除對話紀錄 */
+    clear() {
+      this.stop();
+      this.log = [];
+      this.task = null;
+      this.caption = '';
+      this.misses = 0;
     },
 
     /** 任何時候都可以停 */
