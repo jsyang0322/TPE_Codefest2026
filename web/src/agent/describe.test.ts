@@ -33,9 +33,9 @@ test('圖書館：書名去掉副題，最多唸三本', () => {
   // 示範服務站搜尋「神奇柑仔店」實際讀回的資料
   assert.equal(
     describeResult('library_search', { books: ['歡迎光臨錢天堂 : 神奇柑仔店大圖鑑', '神奇柑仔店. 15, 冒牌的長髮公主餅乾'] }),
-    '找到 2 本，有《歡迎光臨錢天堂》、《神奇柑仔店. 15, 冒牌的長髮公主餅乾》。',
+    '先列出 2 本，有《歡迎光臨錢天堂》、《神奇柑仔店. 15, 冒牌的長髮公主餅乾》。',
   );
-  assert.equal(describeResult('library_search', { books: ['A', 'B', 'C', 'D'] }), '找到 4 本，有《A》、《B》、《C》等。');
+  assert.equal(describeResult('library_search', { books: ['A', 'B', 'C', 'D'] }), '先列出 4 本，有《A》、《B》、《C》等。');
   assert.equal(describeResult('library_search', { books: [] }), '沒有找到相關的書，可以換個書名或作者再試一次。');
 });
 
@@ -48,6 +48,28 @@ test('臨櫃叫號：去掉號碼前面的 0', () => {
   assert.equal(describeResult('counter_calling', { counters: [] }), '目前查不到櫃檯的等候狀況。');
 });
 
-test('瀏覽器模擬回傳文字時原樣顯示', () => {
+test('結果是文字時原樣顯示', () => {
   assert.equal(describeResult('parking_fee', { bills: '（瀏覽器模擬）查到 2 筆' }), '（瀏覽器模擬）查到 2 筆');
+});
+
+test('期限用日期比較，不用字串排序（review）', () => {
+  assert.equal(
+    describeResult('parking_fee', {
+      bills: [
+        { 繳費期限: '2024/12/31', 繳費金額: 'NT$60' },
+        { 繳費期限: '2024/9/1', 繳費金額: 'NT$150' },
+      ],
+    }),
+    '查到 2 筆，共 210 元，最早的期限是 2024 年 9 月 1 日。',
+  );
+});
+
+test('繳費完成', () => {
+  // 示範服務站繳費完成頁實際讀回的資料
+  assert.equal(
+    describeResult('parking_fee_pay', {
+      receipt: { 繳費項目: '停車費', 繳費日期: '2026/11/07', 付款方式: '悠遊付', 帳單總金額: 'NT$510' },
+    }),
+    '繳費完成，用悠遊付繳了 510 元。',
+  );
 });

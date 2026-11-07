@@ -18,27 +18,37 @@ export function matchCommand(text: string): Command | null {
   return null;
 }
 
-// 「不是」包含「是」、「不要」包含「要」，所以先比對否定詞
+// 比對順序：含否定字的肯定說法 → 否定 → 肯定。
+// 「不錯」「沒問題」含「不」「沒」但意思是肯定；「不是」包含「是」、「不要」包含「要」。
+const YES_WITH_NEGATIVE = ['不錯', '沒問題', '沒錯'];
 const NO = ['不是', '不要', '不對', '錯了', '不'];
-const YES = ['對', '是', '好', '沒錯', '可以', '要'];
+const YES = ['對', '是', '好', '可以', '要'];
 
 /** 是非題的回答；判斷不出來回傳 null，由呼叫端再問 LLM 或再問一次 */
 export function matchYesNo(text: string): 'yes' | 'no' | null {
+  if (YES_WITH_NEGATIVE.some((word) => text.includes(word))) return 'yes';
   if (NO.some((word) => text.includes(word))) return 'no';
   if (YES.some((word) => text.includes(word))) return 'yes';
   return null;
 }
 
-/** 腳本 id → 關鍵字 */
-const SCRIPT_KEYWORDS: Record<string, string[]> = {
-  parking_fee: ['停車'],
-  library_search: ['圖書館', '借書', '找書', '查書', '書'],
-  counter_calling: ['叫號', '排隊', '號碼牌', '輪到', '等候', '等多久', '幾個人'],
-};
+/**
+ * 腳本 id → 關鍵字，依陣列順序判斷，越具體的越前面。
+ * 不用單字「書」：「區公所辦證明書要排多久」會被當成查書。
+ */
+const SCRIPT_KEYWORDS: [string, string[]][] = [
+  ['parking_fee', ['停車']],
+  [
+    'counter_calling',
+    ['叫號', '排隊', '號碼牌', '輪到', '等候', '等多久', '幾個人', '幾號',
+      '地政', '戶政', '戶籍', '區公所', '公所', '稅捐', '就業服務站'],
+  ],
+  ['library_search', ['圖書館', '借書', '找書', '查書', '的書', '這本書', '書名', '作者', '館藏']],
+];
 
 /** 用關鍵字挑腳本；只回傳 scriptIds 裡有的（還沒寫好的腳本不會被挑到） */
 export function matchScript(text: string, scriptIds: string[]): string | null {
-  for (const [id, words] of Object.entries(SCRIPT_KEYWORDS)) {
+  for (const [id, words] of SCRIPT_KEYWORDS) {
     if (scriptIds.includes(id) && words.some((word) => text.includes(word))) return id;
   }
   return null;

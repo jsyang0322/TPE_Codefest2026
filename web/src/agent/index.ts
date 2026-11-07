@@ -5,12 +5,15 @@
 //   validate.ts   檢查 LLM 任務 A 的輸出
 //   prompts.ts    任務 A、B 的 prompt
 //   describe.ts   把腳本結果轉成一句話
+//   followup.ts   做完後接著做的腳本（查完停車費接著繳費）
 
 import { bridge } from '../bridge';
 import type { TaskScript } from '../bridge/types';
 import counterCalling from './scripts/counter_calling.json';
 import librarySearch from './scripts/library_search.json';
 import parkingFee from './scripts/parking_fee.json';
+import parkingFeePay from './scripts/parking_fee_pay.json';
+import { planFollowUp, type FollowUp } from './followup';
 import { matchScript } from './keywords';
 import { matchOption } from './normalize';
 import { faqPrompt, taskPrompt, taskUserPrompt, type FaqFile } from './prompts';
@@ -25,6 +28,25 @@ export const scripts: Record<string, TaskScript> = {
   library_search: librarySearch as TaskScript,
   counter_calling: counterCalling as TaskScript,
 };
+
+/**
+ * 只能從別的腳本接續執行的腳本（例如繳費一定要先查詢、再確認）。
+ * 不放進 scripts，所以 LLM 和關鍵字不會直接挑到。
+ */
+const followUpScripts: Record<string, TaskScript> = {
+  parking_fee_pay: parkingFeePay as TaskScript,
+};
+
+export type { FollowUp };
+
+/** 腳本做完後，要不要接著問使用者做下一個；不用的話回傳 null */
+export function nextTask(
+  script: TaskScript,
+  result: Record<string, unknown>,
+  slots: Record<string, string>,
+): FollowUp | null {
+  return planFollowUp(script, result, slots, followUpScripts);
+}
 
 /** web/src/data/faq/ 底下所有 JSON，建置時打包 */
 const faqs = Object.values(

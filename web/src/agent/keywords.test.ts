@@ -28,11 +28,25 @@ test('關鍵字挑腳本', () => {
   const all = ['parking_fee', 'library_search', 'counter_calling'];
   assert.equal(matchScript('我想查停車費', all), 'parking_fee');
   assert.equal(matchScript('幫我在圖書館找一本書', all), 'library_search');
-  assert.equal(matchScript('現在叫到幾號', all), null);
+  assert.equal(matchScript('現在叫到幾號', all), 'counter_calling');
   assert.equal(matchScript('我要排隊', all), 'counter_calling');
   assert.equal(matchScript('今天天氣如何', all), null);
 });
 
 test('還沒有的腳本不會被挑到', () => {
   assert.equal(matchScript('我要借書', ['parking_fee']), null);
+});
+
+test('是非題：「不錯」「沒問題」是肯定（review）', () => {
+  assert.equal(matchYesNo('不錯'), 'yes');
+  assert.equal(matchYesNo('沒問題'), 'yes');
+  assert.equal(matchYesNo('不行'), 'no');
+});
+
+test('關鍵字挑腳本：不被「書」誤導、認得機關名稱（review）', () => {
+  const all = ['parking_fee', 'library_search', 'counter_calling'];
+  assert.equal(matchScript('區公所辦證明書要排多久', all), 'counter_calling');
+  assert.equal(matchScript('戶政事務所現在幾號', all), 'counter_calling');
+  assert.equal(matchScript('我要找東野圭吾的書', all), 'library_search');
+  assert.equal(matchScript('秘書', all), null);
 });

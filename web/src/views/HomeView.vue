@@ -78,7 +78,13 @@ const phaseIcon: Record<string, string> = {
     <section v-if="assistant.log.length" aria-labelledby="log-title" class="flex flex-col gap-2">
       <div class="flex items-center justify-between">
         <h2 id="log-title" class="text-lg font-semibold">對話紀錄</h2>
-        <button type="button" class="min-h-12 px-3 text-base font-semibold text-primary-700 underline" @click="assistant.clear()">
+        <!-- 對話或操作進行中不能清除：流程還在跑，清掉會讓後面的步驟出錯 -->
+        <button
+          type="button"
+          class="min-h-12 px-3 text-base font-semibold text-primary-700 underline disabled:text-grayscale-400 disabled:no-underline"
+          :disabled="busy"
+          @click="assistant.clear()"
+        >
           清除紀錄
         </button>
       </div>
