@@ -1,6 +1,6 @@
 # 台北通無障礙輔助：iPhone 實機測試手冊
 
-給在 Mac 上測試的組員。照順序做完大約 1 小時：部署與套用 30～45 分鐘，實機測試 15 分鐘。
+給在 Mac 上測試的組員。照順序做完大約 1 小時：準備與套用 20～30 分鐘，實機測試 15 分鐘。
 **截止 11/8 09:00，請在那之前把結果回報（見最後一節）。**
 
 ## 這次要測什麼
@@ -19,18 +19,18 @@
 
 ## 準備
 
-你平常在 iPhone 上跑 TownPass 的環境都能用，另外只多一個 Google Cloud 帳號。
+你平常在 iPhone 上跑 TownPass 的環境都能用，另外只要裝 Python 和 cloudflared，**不需要任何雲端帳號**。
 
 | 要有的東西 | 用來做什麼 | 檢查方式 |
 | --- | --- | --- |
 | Mac＋Xcode＋FVM（Flutter 3.47.6） | 編譯、執行 TownPass | `fvm flutter --version` |
 | 一支 iPhone，之前跑過 TownPass | 當長輩的手機 | 照你平常的方式能裝上去就好 |
 | 第二支手機，或 Mac 的瀏覽器 | 當家人的手機 | 能打開 https 網址 |
-| Google Cloud 帳號，已綁信用卡 | 把後端放上 Cloud Run（免費額度內） | 能登入 [console.cloud.google.com](https://console.cloud.google.com) |
-| gcloud 指令 | 部署後端 | `brew install --cask google-cloud-sdk`，再 `gcloud --version` |
+| Python 3.11 以上 | 在 Mac 上跑後端 | `python3 --version`；沒有就 `brew install python@3.12` |
+| cloudflared | 讓不同網路的手機連到 Mac 上的後端（免費、不用註冊） | `brew install cloudflared`，再 `cloudflared --version` |
 | 兩個資料夾放在一起 | 修改檔用相對路徑套用 | `TownPass/` 和 `TPE_Codefest2026/` 在同一個資料夾裡 |
 
-不用裝 Docker：Cloud Run 會在 Google 的電腦上照 `a11y/Dockerfile` 建置。也不用裝 Python。
+不用裝 Docker：`a11y/Dockerfile` 是之後交給資訊局，在他們的伺服器上跑的時候才用。
 
 ## 步驟一：拿到程式
 
@@ -46,33 +46,39 @@ git log --oneline -3                  # 最上面幾個 commit 是「讓家人�
 
 這個分支只動了 `a11y/` 資料夾，沒有改 `web/` 或其他人的程式。
 
-## 步驟二：把後端放上 Cloud Run
+## 步驟二：在 Mac 上跑後端，並打開通道
 
-iPhone 的台北通只能連 https，所以後端要先放到網路上。
-這次 App 本身也要連後端傳畫面，**請用 Cloud Run**；用 Mac 自己產生的憑證，App 可能不接受。
+後端（網頁＋轉送畫面的程式）跑在你的 Mac 上。`cloudflared` 通道會給它一個公開的 https 網址，
+長輩和家人在不同的網路也連得到（入門指引第 07 章允許比賽期間用通道對外提供本機服務）。之後交給資訊局，就改跑在他們的伺服器上。
 
-```bash
-gcloud auth login                                     # 會開瀏覽器登入
-gcloud projects create tpe-a11y-你的名字 --name=a11y   # 已經有專案就跳過，改用那個專案 ID
-gcloud config set project tpe-a11y-你的名字
-```
-
-到 [Google Cloud 帳單頁](https://console.cloud.google.com/billing) 把這個專案連到帳單帳戶。沒有連，下一步會失敗。
+**終端機 1：後端**
 
 ```bash
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 cd ~/你放專案的資料夾/TPE_Codefest2026/a11y
-gcloud run deploy a11y --source . --region asia-east1 --allow-unauthenticated --max-instances 1 --timeout 3600
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-- 第一次會問要不要建立 Artifact Registry 的儲存庫，回答 `Y`。
-- 等 3～5 分鐘，最後會印出 `Service URL: https://a11y-xxxxxxxx.asia-east1.run.app`，**把這個網址記下來**，後面叫它「後端網址」。
-- `--max-instances 1` 一定要加：登入和分享的狀態存在記憶體，只能有一台。`--timeout 3600` 讓傳畫面的連線可以連 1 小時。
+看到 `Uvicorn running on http://127.0.0.1:8000` 就好了。第一次啟動會從台北通官方網站同步常見問題，要有網路。
+
+**終端機 2：通道**
+
+```bash
+cloudflared tunnel --url http://localhost:8000
+```
+
+幾秒後會印出一個框，裡面有 `https://隨機名稱.trycloudflare.com`，**把這個網址記下來**，後面叫它「後端網址」。
+
+- 兩個終端機在測試和展示期間都**不要關**。重開 `cloudflared` 網址會換，就要重新做步驟四。
+- Mac 睡著就連不到了：接上電源，再開**終端機 3** 執行 `caffeinate -dims`，測完按 `Ctrl`＋`C` 結束。
 
 確認後端正常：
 
 1. 用 Mac 的瀏覽器打開 `後端網址/api/health`，應該看到 `{"ok":true}`。
 2. 打開 `後端網址/`，應該看到「台北通無障礙輔助」首頁，下面的「連線狀態」寫「連線正常」。
+
+通道打不開的話，也可以讓 iPhone 和 Mac 連同一個 Wi-Fi，不用通道，做法見 [README.md](README.md) 的「部署 › 只在同一個 Wi-Fi 測試」。
 
 ## 步驟三：在 TownPass 套用修改檔
 
@@ -108,7 +114,7 @@ fvm flutter test test/a11y_share_test.dart
 把「後端網址」放進 `A11Y_URL`，**結尾一定要有 `/`**：
 
 ```bash
-fvm flutter run --dart-define=A11Y_URL=https://a11y-xxxxxxxx.asia-east1.run.app/
+fvm flutter run --dart-define=A11Y_URL=https://隨機名稱.trycloudflare.com/
 ```
 
 - 有好幾台裝置時，用 `fvm flutter devices` 找到 iPhone 的 ID，再加 `-d <ID>`。
@@ -159,8 +165,9 @@ fvm flutter run --dart-define=A11Y_URL=https://a11y-xxxxxxxx.asia-east1.run.app/
 | 家人一直看到「還看不到 王阿伯 的畫面」 | App 連不上後端 | 看 `flutter run` 的終端機有沒有 `a11y share: connect failed`，把那一行回報 |
 | 家人看到畫面，但網頁那一塊是空白 | WebView 截圖失敗 | 看終端機有沒有 `a11y share: capture failed`，回報第 7 步 ❌ |
 | 家人點了沒反應 | 指令沒送到，或位置沒有東西可以按 | 看家人頁最上面的訊息框寫什麼，回報那句話 |
-| 網頁出現「請重新登入」 | Cloud Run 閒置一陣子會關掉，記憶體裡的登入和綁定會清掉 | 兩邊重新登入、重新綁定；正式展示前先打開一次後端網址 |
-| `gcloud run deploy` 出現權限或帳單錯誤 | 專案沒連帳單帳戶，或 API 沒啟用 | 照步驟二連帳單、啟用 API，再部署一次 |
+| 網頁出現「請重新登入」 | 後端重開過，記憶體裡的登入和綁定清掉了 | 兩邊重新登入、重新綁定 |
+| `cloudflared` 印出的網址打不開 | 通道剛建立要等幾秒，或網路擋住 | 等 10 秒再試；還是不行就重開 `cloudflared`（網址會換，要重新 `flutter run`），或改用同一個 Wi-Fi 的做法 |
+| 一開始正常，過一陣子全部連不上 | Mac 睡著了，或終端機被關掉 | 確認三個終端機都還開著，`caffeinate -dims` 在跑 |
 | 麥克風沒反應 | 權限被拒絕 | iPhone 的「設定 → 台北通」打開麥克風與語音辨識 |
 
 ## 測完回報與還原
@@ -181,4 +188,4 @@ git checkout main
 git branch -D feat/a11y-share        # 確定不要這個分支才刪
 ```
 
-測試用的 Cloud Run 不用的時候可以刪掉：`gcloud run services delete a11y --region asia-east1`。
+測完在終端機 1、2、3 各按 `Ctrl`＋`C`，停掉後端、通道和防睡眠。

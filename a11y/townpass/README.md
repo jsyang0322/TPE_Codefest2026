@@ -29,14 +29,19 @@ fvm flutter test test/a11y_share_test.dart                             # 8 個�
 
 ## 在 iPhone 上執行
 
-後端要先有 **https** 網址（做法見 `a11y/README.md` 的「部署」）。**建議用 Cloud Run**：
-App 用 Dart 的 WebSocket 連後端，在 Mac 上用 mkcert 自己產生的憑證，網頁可以開，但 App 的連線不一定接受。
+後端要先有 **https** 網址（做法見 `a11y/README.md` 的「部署」）。比賽期間後端跑在自己的電腦，用 `cloudflared` 通道對外：
 
 ```bash
-fvm flutter run --dart-define=A11Y_URL=https://你的網址/
+fvm flutter run --dart-define=A11Y_URL=https://隨機名稱.trycloudflare.com/
 ```
 
-`A11Y_URL` 結尾要有 `/`。沒有指定的話，「無障礙輔助」會打不開。
+只在同一個 Wi-Fi、用 mkcert 自己產生的憑證時，多加一個參數：
+
+```bash
+fvm flutter run --dart-define=A11Y_URL=https://192.168.1.23:8443/ --dart-define=A11Y_ALLOW_SELF_SIGNED=true
+```
+
+`A11Y_URL` 結尾要有 `/`。沒有指定的話，「無障礙輔助」會打不開。交給資訊局時，`A11Y_URL` 改成他們伺服器的正式網址。
 
 ## 測試步驟（兩支手機）
 

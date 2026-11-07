@@ -69,10 +69,10 @@ index 19724fa..66ba56a 100644
        MyServiceItemId.dashboard,
 diff --git a/lib/service/a11y_share_service.dart b/lib/service/a11y_share_service.dart
 new file mode 100644
-index 0000000..93580b2
+index 0000000..504da28
 --- /dev/null
 +++ b/lib/service/a11y_share_service.dart
-@@ -0,0 +1,872 @@
+@@ -0,0 +1,891 @@
 +import 'dart:async';
 +import 'dart:convert';
 +import 'dart:io';
@@ -108,6 +108,11 @@ index 0000000..93580b2
 +    'A11Y_URL',
 +    defaultValue: 'https://a11y.invalid/',
 +  );
++
++  /// 測試時後端跑在自己的電腦，用 mkcert 自己產生 https 憑證：
++  /// `--dart-define=A11Y_ALLOW_SELF_SIGNED=true` 讓 App 傳畫面的連線接受這張憑證（只限 A11Y_URL 那台電腦）。
++  /// 正式上線（主辦單位的伺服器有正式憑證）不要加。
++  static const bool allowSelfSigned = bool.fromEnvironment('A11Y_ALLOW_SELF_SIGNED');
 +
 +  /// 重要按鈕的字，和網頁版（a11y/frontend/js/share-agent.js）相同
 +  static final RegExp importantWords = RegExp('付款|繳費|繳納|支付|結帳|購買|訂購|轉帳|儲值|扣款|送出|提交|確認|確定|申請|報名|預約|刪除|註銷|解除|登出|變更|修改|同意');
@@ -310,7 +315,10 @@ index 0000000..93580b2
 +      return;
 +    }
 +    try {
-+      final WebSocket socket = await WebSocket.connect(_socketUri(current.token).toString());
++      final WebSocket socket = await WebSocket.connect(
++        _socketUri(current.token).toString(),
++        customClient: allowSelfSigned ? _selfSignedClient() : null,
++      );
 +      if (session.value != current) {
 +        await socket.close(WebSocketStatus.normalClosure);
 +        return;
@@ -332,6 +340,11 @@ index 0000000..93580b2
 +      debugPrint('a11y share: connect failed $error');
 +      _scheduleReconnect(current);
 +    }
++  }
++
++  HttpClient _selfSignedClient() {
++    final String host = Uri.parse(serviceUrl).host;
++    return HttpClient()..badCertificateCallback = (_, String certHost, _) => certHost == host;
 +  }
 +
 +  void _onClosed(WebSocket socket) {
@@ -393,6 +406,12 @@ index 0000000..93580b2
 +
 +  Future<void> _tick() async {
 +    if (_socket == null || _capturing) {
++      return;
++    }
++    // App 在背景（或螢幕關掉）時不拍，省電也不佔資源；回到前景會重送一次畫面
++    final AppLifecycleState? lifecycle = WidgetsBinding.instance.lifecycleState;
++    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) {
++      _forceFrame = true;
 +      return;
 +    }
 +    final RenderRepaintBoundary? boundary = _boundary();

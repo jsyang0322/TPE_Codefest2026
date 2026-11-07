@@ -66,29 +66,45 @@ python -m venv .venv
 王小美按「看 王阿伯 的畫面」，點畫面上的欄位與按鈕。按「送出申請」時，王阿伯的視窗會先問他。
 （電腦上只能分享模擬服務頁；分享整個台北通的畫面要在手機上測，步驟見 [townpass/README.md](townpass/README.md)。）
 
-## 部署（iPhone 的台北通只能連 https）
+## 部署
 
-**做法一：Cloud Run**（主辦單位建議，免費額度內；**分享整個台北通的畫面建議用這個**）。在 `a11y/` 執行：
+後端（網頁＋API＋轉送畫面）是同一個程式，**在哪一台電腦都能跑**，換地方只要改 TownPass 的 `A11Y_URL`，程式碼不用改。
+iPhone 的台北通只能開 https 網址。
+
+**比賽期間：跑在自己的電腦，用通道讓外面連進來**（入門指引第 07 章：「於比賽期間以 ngrok 對外提供本機服務」）。
+程式在自己的電腦上執行，通道只負責轉送，長輩和家人在不同網路也能用，也自動有 https。
 
 ```bash
-gcloud run deploy a11y --source . --region asia-east1 --allow-unauthenticated --max-instances 1 --timeout 3600
+.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000   # 終端機 1：後端
+cloudflared tunnel --url http://localhost:8000                               # 終端機 2：通道（brew install cloudflared）
 ```
 
-`--max-instances 1`：狀態存在記憶體，只能有一台；`--timeout 3600`：分享畫面用的 WebSocket 要能連久一點。
-完成後得到 `https://a11y-xxxx.asia-east1.run.app`，TownPass 用 `--dart-define=A11Y_URL=https://a11y-xxxx.asia-east1.run.app/` 執行。
+`cloudflared`（Cloudflare 的開源通道程式，Apache-2.0）免費、不用註冊帳號，會印出 `https://隨機名稱.trycloudflare.com`。
+TownPass 用 `--dart-define=A11Y_URL=https://隨機名稱.trycloudflare.com/` 執行。這個網址每次重開 `cloudflared` 都會換，
+所以測試和展示期間讓它一直開著；換了網址就要重新 `flutter run`。也可以改用入門指引提到的 ngrok（免費方案有每月流量上限）。
 
-**做法二：在 Mac 上跑，iPhone 連同一個 Wi-Fi**（用開源的 mkcert 產生憑證）：
+**只在同一個 Wi-Fi 測試**（不用通道；手機和電腦要連同一個 Wi-Fi）：用開源的 mkcert 產生憑證。
 
 ```bash
 brew install mkcert && mkcert -install
-mkcert 192.168.1.23          # 換成 Mac 的區網 IP，產生 192.168.1.23.pem 與 192.168.1.23-key.pem
+mkdir -p certs && mkcert -cert-file certs/a11y.pem -key-file certs/a11y-key.pem 192.168.1.23   # 換成電腦的區網 IP
 .venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8443 \
-  --ssl-certfile 192.168.1.23.pem --ssl-keyfile 192.168.1.23-key.pem
+  --ssl-certfile certs/a11y.pem --ssl-keyfile certs/a11y-key.pem
 ```
 
 把 `$(mkcert -CAROOT)/rootCA.pem` 用 AirDrop 傳到 iPhone 安裝，再到「設定 → 一般 → 關於本機 → 憑證信任設定」打開它。
-TownPass 用 `--dart-define=A11Y_URL=https://192.168.1.23:8443/` 執行。
-注意：台北通 App 用 Dart 的 WebSocket 傳畫面，不一定接受 mkcert 的憑證；連不上時請改用做法一。
+TownPass 用 `--dart-define=A11Y_URL=https://192.168.1.23:8443/ --dart-define=A11Y_ALLOW_SELF_SIGNED=true` 執行
+（第二個參數讓 App 傳畫面的連線接受這張自己產生的憑證，只限這台電腦）。`certs/` 不會被 commit。
+
+**交給資訊局：跑在他們的伺服器**。用 `a11y/Dockerfile`：
+
+```bash
+docker build -t a11y .
+docker run -d -p 8080:8080 --name a11y a11y      # 埠號可用環境變數 PORT 改
+```
+
+前面接上他們的 https（正式憑證），TownPass 的 `A11Y_URL` 改成正式網址，不要加 `A11Y_ALLOW_SELF_SIGNED`。
+登入與分享的狀態存在記憶體，只能跑一份（不能同時開好幾台分流）。
 
 ## 測試
 
@@ -104,9 +120,9 @@ node --test "tests/js/*.test.js"        # 前端的搜尋、語音指令、朗�
 | --- | --- | --- |
 | `A11Y_DB_PATH` | SQLite 檔案位置 | `backend/a11y.db`（Docker 裡是 `/tmp/a11y.db`） |
 | `A11Y_FAQ_AUTO_SYNC` | 設成 `0` 就不自動同步常見問題 | `1` |
-| `PORT` | Docker／Cloud Run 的連接埠 | `8080` |
+| `PORT` | Docker 的連接埠 | `8080` |
 
-其他可調整的時間與次數在 `backend/config.py`。TownPass 端的網址用 `--dart-define=A11Y_URL=...` 指定。
+其他可調整的時間與次數在 `backend/config.py`。TownPass 端用 `--dart-define=A11Y_URL=...` 指定網址，測試用自己產生的憑證時再加 `--dart-define=A11Y_ALLOW_SELF_SIGNED=true`。
 
 ## 資料來源
 
@@ -129,7 +145,8 @@ node --test "tests/js/*.test.js"        # 前端的搜尋、語音指令、朗�
 | SQLite | Python 內建 | 公共領域 | 資料庫 |
 | pytest | 9.2.0 | MIT | 測試（不部署） |
 | httpx | 0.28.1 | BSD-3-Clause | 測試（不部署） |
-| mkcert | 1.4 以上 | BSD-3-Clause | 選用：在 Mac 上產生 https 憑證（不部署） |
+| cloudflared | 最新版 | Apache-2.0 | 選用：比賽期間讓外面連到自己電腦上的後端（不部署） |
+| mkcert | 1.4 以上 | BSD-3-Clause | 選用：同一個 Wi-Fi 測試時產生 https 憑證（不部署） |
 
 ## AI 使用聲明
 

@@ -1,5 +1,6 @@
-# 無障礙輔助：後端（FastAPI）同時提供網頁與 API。
-# Cloud Run：在 a11y/ 執行 gcloud run deploy（指令見 README.md「部署」）。Cloud Run 會給 PORT。
+# 無障礙輔助：後端（FastAPI）同時提供網頁、API 與分享畫面的轉送。
+# 交給資訊局在自己的伺服器執行：docker build -t a11y . && docker run -d -p 8080:8080 a11y
+# 登入與分享的狀態存在記憶體，只能跑一份。埠號讀環境變數 PORT。
 FROM python:3.12-slim
 
 WORKDIR /app
