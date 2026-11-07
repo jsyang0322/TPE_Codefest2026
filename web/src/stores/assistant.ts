@@ -81,22 +81,64 @@ export const useAssistant = defineStore('assistant', {
     log: (restored?.log ?? []) as LogEntry[],
     task: (restored?.task ?? null) as TaskProgress | null,
     llmState: 'loading' as 'missing' | 'loading' | 'ready' | 'unavailable',
+    /** 模型下載進度（0–100），App 有提供時才有值；從手機檔案載入時是 0 */
+    llmProgress: null as number | null,
+    /** App 回報的上次失敗原因（原始錯誤訊息，給隊員看，不念給使用者聽） */
+    llmMessage: null as string | null,
+    /** 正在輪詢 llm_status，避免重試按鈕連按開出好幾個輪詢 */
+    llmPolling: false,
+    /** 裝置不支援離線語音辨識或沒有麥克風權限：改用任務大按鈕 */
+    voiceUnavailable: false,
     /** 連續聽不懂的次數，第二次就顯示任務大按鈕 */
     misses: 0,
   }),
 
   getters: {
-    showTaskButtons: (state) => state.misses >= 2 || state.llmState !== 'ready',
+    showTaskButtons: (state) => state.misses >= 2 || state.llmState !== 'ready' || state.voiceUnavailable,
   },
 
   actions: {
     /** 網頁一打開就預熱模型 */
-    async init() {
+    init() {
+      return this.pollLlm();
+    },
+
+    /**
+     * 每 2 秒送一次 llm_status，直到 ready 或 missing。
+     * App 收到 llm_status 會立刻回目前狀態並在背景載入（必要時下載），所以要輪詢。
+     * missing 代表下載或載入失敗（通常是沒網路），不是死路：retryLlm() 會重新開始。
+     */
+    async pollLlm() {
+      if (this.llmPolling) return;
+      this.llmPolling = true;
       try {
-        this.llmState = await bridge.llmStatus();
-      } catch {
+        const deadline = Date.now() + 15 * 60 * 1000;
+        while (Date.now() < deadline) {
+          try {
+            const { state, progress, message } = await bridge.llmStatus();
+            this.llmState = state;
+            this.llmProgress = progress;
+            this.llmMessage = message;
+            if (state !== 'loading') return;
+          } catch {
+            // App 沒有 llm_status Handler（例如還沒合併）：當成模型不可用，改用關鍵字
+            this.llmState = 'unavailable';
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
         this.llmState = 'unavailable';
+      } finally {
+        this.llmPolling = false;
       }
+    },
+
+    /** 重試按鈕：再送一次 llm_status，App 會重新下載或載入模型 */
+    retryLlm() {
+      this.llmState = 'loading';
+      this.llmProgress = null;
+      this.llmMessage = null;
+      return this.pollLlm();
     },
 
     async say(text: string) {
@@ -119,7 +161,9 @@ export const useAssistant = defineStore('assistant', {
         const text = await bridge.listen((partial) => (this.caption = partial));
         if (text) this.log.push({ role: 'user', text });
         return text;
-      } catch {
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === 'unavailable' || code === 'permission') this.voiceUnavailable = true;
         return '';
       } finally {
         this.phase = 'idle';
@@ -130,7 +174,13 @@ export const useAssistant = defineStore('assistant', {
     async talk() {
       if (this.phase !== 'idle') return this.stop();
 
+      if (this.voiceUnavailable) {
+        return this.say('這支手機目前沒辦法離線聽寫，請直接按下面的按鈕選擇要辦的事。');
+      }
       const text = await this.listen();
+      if (this.voiceUnavailable) {
+        return this.say('這支手機目前沒辦法離線聽寫，請直接按下面的按鈕選擇要辦的事。');
+      }
       if (!text) return this.say('我沒有聽到，請再按一次按鈕說話。');
 
       this.phase = 'thinking';
@@ -167,10 +217,10 @@ export const useAssistant = defineStore('assistant', {
         while (!slots[key] && tries < 2) {
           await this.say(spec.ask);
           const reply = await this.listen();
-          // 「停止」「再說一次」要先判斷，不能當成欄位的值
+          // 先判斷「停止」「再說一次」，不是指令才當成答案（規則見 agent/keywords.ts）
           const command = reply ? matchCommand(reply) : null;
           if (command === 'stop') {
-            await this.say('好的，已經取消。');
+            await this.say('好的，先停在這裡，需要時再按按鈕叫我。');
             return false;
           }
           if (command === 'repeat') continue; // 回到迴圈開頭重念 spec.ask，不算一次嘗試
@@ -231,6 +281,8 @@ export const useAssistant = defineStore('assistant', {
         task.status = 'done';
         task.result = describeResult(script.id, result);
         this.phase = 'idle';
+        // 摘要句（查到 N 筆共 X 元）只有網頁算得出來，由網頁念；
+        // 腳本的 stop 已改成短句「查詢完成」，App 端不會重複念到內容
         if (task.result) await this.say(task.result);
         const next = nextTask(script, result, slots);
         if (next) await this.offerNext(next);

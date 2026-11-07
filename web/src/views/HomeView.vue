@@ -47,6 +47,22 @@ const phaseIcon: Record<string, string> = {
       {{ phaseLabel[assistant.phase] }}
     </p>
 
+    <!-- 模型狀態：載入中提示進度；評審問「AI 在哪裡跑」時也看得到 -->
+    <p v-if="assistant.llmState === 'loading'" class="text-base text-grayscale-600" role="status">
+      手機上的 AI 模型{{ assistant.llmProgress ? `下載中（${assistant.llmProgress}%）` : '載入中' }}，先可以用下方按鈕選擇要辦的事。
+    </p>
+    <!-- 下載失敗不是死路：按重試會再送 llm_status，App 會重新下載（比賽現場網路不穩時用得到） -->
+    <section v-else-if="assistant.llmState === 'missing'" class="tp-card flex flex-col gap-3 border-l-4 border-red-500" role="alert">
+      <p class="text-lg leading-relaxed">
+        <strong>AI 模型下載失敗</strong>（通常是沒有網路）。接上網路後按「重試」；在那之前可以用下方按鈕選擇要辦的事。
+      </p>
+      <button type="button" class="tp-btn-secondary self-start" @click="assistant.retryLlm()">重試下載</button>
+      <details v-if="assistant.llmMessage" class="text-base text-grayscale-600">
+        <summary class="min-h-12 cursor-pointer py-3">技術訊息（給工作人員）</summary>
+        <p class="break-words">{{ assistant.llmMessage }}</p>
+      </details>
+    </section>
+
     <!-- 字幕：使用者說的話、助手念的話都顯示在這裡（聽障者也能使用） -->
     <section class="tp-card min-h-32 p-5" aria-label="字幕" aria-live="polite">
       <p v-if="assistant.caption" class="text-2xl leading-relaxed font-semibold break-words">

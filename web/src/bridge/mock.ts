@@ -142,6 +142,8 @@ async function mockRunTask(data: Record<string, unknown>, options: RequestOption
 
 // ---- 進入點 ----
 
+let mockStatusCalls = 0;
+
 export function mockRequest(name: string, data: Record<string, unknown>, options: RequestOptions): Promise<BridgeReply> {
   switch (name) {
     case 'voice_listen':
@@ -149,7 +151,17 @@ export function mockRequest(name: string, data: Record<string, unknown>, options
     case 'tts_speak':
       return mockSpeak(String(data.text ?? ''), data.rate as number | undefined);
     case 'llm_status':
-      return Promise.resolve({ status: 'done', state: 'ready' });
+      // 模擬 App：前兩次回「載入中」，之後 ready，用來測網頁的輪詢。
+      // 網址加 ?llm=missing 時，第一次回下載失敗，用來測重試按鈕。
+      mockStatusCalls += 1;
+      if (mockStatusCalls === 1 && location.search.includes('llm=missing')) {
+        return Promise.resolve({ status: 'done', state: 'missing', message: 'SocketException: Failed host lookup（模擬）' });
+      }
+      return Promise.resolve(
+        mockStatusCalls < 3 || (location.search.includes('llm=missing') && mockStatusCalls < 4)
+          ? { status: 'done', state: 'loading', progress: mockStatusCalls * 30 }
+          : { status: 'done', state: 'ready' },
+      );
     case 'llm_ask':
       return mockAsk(data, options);
     case 'run_task':
