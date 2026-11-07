@@ -72,8 +72,12 @@ export const useAssistant = defineStore('assistant', {
     log: (restored?.log ?? []) as LogEntry[],
     task: (restored?.task ?? null) as TaskProgress | null,
     llmState: 'loading' as 'missing' | 'loading' | 'ready' | 'unavailable',
-    /** 模型下載或載入進度（0–100），App 有提供時才有值 */
+    /** 模型下載進度（0–100），App 有提供時才有值；從手機檔案載入時是 0 */
     llmProgress: null as number | null,
+    /** App 回報的上次失敗原因（原始錯誤訊息，給隊員看，不念給使用者聽） */
+    llmMessage: null as string | null,
+    /** 正在輪詢 llm_status，避免重試按鈕連按開出好幾個輪詢 */
+    llmPolling: false,
     /** 裝置不支援離線語音辨識或沒有麥克風權限：改用任務大按鈕 */
     voiceUnavailable: false,
     /** 連續聽不懂的次數，第二次就顯示任務大按鈕 */
@@ -85,26 +89,47 @@ export const useAssistant = defineStore('assistant', {
   },
 
   actions: {
+    /** 網頁一打開就預熱模型 */
+    init() {
+      return this.pollLlm();
+    },
+
     /**
-     * 網頁一打開就預熱模型。App 收到 llm_status 會立刻回目前狀態並在背景載入，
-     * 所以這裡每 2 秒問一次，直到 ready 或 missing（手機上沒有模型檔）。
+     * 每 2 秒送一次 llm_status，直到 ready 或 missing。
+     * App 收到 llm_status 會立刻回目前狀態並在背景載入（必要時下載），所以要輪詢。
+     * missing 代表下載或載入失敗（通常是沒網路），不是死路：retryLlm() 會重新開始。
      */
-    async init() {
-      const deadline = Date.now() + 10 * 60 * 1000;
-      while (Date.now() < deadline) {
-        try {
-          const { state, progress } = await bridge.llmStatus();
-          this.llmState = state;
-          this.llmProgress = progress;
-          if (state !== 'loading') return;
-        } catch {
-          // App 沒有 llm_status Handler（例如還沒合併）：當成模型不可用，改用關鍵字
-          this.llmState = 'unavailable';
-          return;
+    async pollLlm() {
+      if (this.llmPolling) return;
+      this.llmPolling = true;
+      try {
+        const deadline = Date.now() + 15 * 60 * 1000;
+        while (Date.now() < deadline) {
+          try {
+            const { state, progress, message } = await bridge.llmStatus();
+            this.llmState = state;
+            this.llmProgress = progress;
+            this.llmMessage = message;
+            if (state !== 'loading') return;
+          } catch {
+            // App 沒有 llm_status Handler（例如還沒合併）：當成模型不可用，改用關鍵字
+            this.llmState = 'unavailable';
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
         }
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        this.llmState = 'unavailable';
+      } finally {
+        this.llmPolling = false;
       }
-      this.llmState = 'unavailable';
+    },
+
+    /** 重試按鈕：再送一次 llm_status，App 會重新下載或載入模型 */
+    retryLlm() {
+      this.llmState = 'loading';
+      this.llmProgress = null;
+      this.llmMessage = null;
+      return this.pollLlm();
     },
 
     async say(text: string) {
