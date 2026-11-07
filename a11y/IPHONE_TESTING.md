@@ -109,7 +109,7 @@ git apply ../TPE_Codefest2026/a11y/townpass/a11y-share.patch
 fvm flutter test test/a11y_share_test.dart
 ```
 
-應該看到 `All tests passed!`，共 10 個。沒過的話，先把輸出存下來回報，再繼續往下測。
+應該看到 `All tests passed!`，共 9 個。沒過的話，先把輸出存下來回報，再繼續往下測。
 
 ## 步驟四：在 iPhone 上執行台北通
 
@@ -184,7 +184,7 @@ fvm flutter run --dart-define=A11Y_URL=https://隨機名稱.trycloudflare.com/
 請傳回這些給我：
 
 1. 步驟五的兩個表格，每一項的 ✅ 或 ❌；❌ 的寫看到了什麼。
-2. 第 5、7、13、15 步的截圖：家人看到的畫面、長輩被問「同意嗎？」的畫面、繳費成功的畫面。
+2. 第 5、7、13、15 步的截圖：家人看到的畫面、長輩被問「同意嗎？」的畫面、停車費「繳費完成」的畫面。
 3. `flutter run` 終端機裡所有 `a11y share:` 開頭的訊息（沒有就寫「沒有」）。
 4. `fvm flutter test test/a11y_share_test.dart` 的結果。
 
