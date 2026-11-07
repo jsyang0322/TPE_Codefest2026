@@ -161,11 +161,10 @@ cd web && npm run build && firebase deploy --only hosting
 | 版本 | flutter_edge_ai 模型目錄之 `gemma4E2bIt`（generic 變體） |
 | 量化格式 | `.litertlm`（LiteRT-LM 格式） |
 | 推論框架 | LiteRT-LM（flutter_edge_ai 2.5.6 + flutter_edge_ai_litertlm 1.19.2） |
-| 模型授權 | Gemma Terms of Use（Apache-2.0 相容之開放權重授權） |
-| 模型來源 | flutter_edge_ai 官方模型目錄（首次啟動時下載，或 demo 前預載） |
+| 模型授權 | Apache-2.0 |
+| 模型來源 | flutter_edge_ai 官方模型目錄，實際檔案為 Hugging Face [`litert-community/gemma-4-E2B-it-litert-lm`](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) 的 `gemma-4-E2B-it.litertlm`（revision `b3ca0d2`，約 2.6 GB；首次啟動時下載，或 demo 前預載） |
 
 語音辨識（speech_to_text，強制 on-device）與語音合成（flutter_tts，系統語音）亦全程於裝置端執行。
-| 模型授權 | |
 
 ## 授權
 
