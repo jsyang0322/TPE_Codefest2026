@@ -36,14 +36,21 @@ test('圖書館：書名去掉副題，最多唸三本', () => {
     '館藏裡找到 2 本，有《歡迎光臨錢天堂》、《神奇柑仔店. 15, 冒牌的長髮公主餅乾》。',
   );
   assert.equal(describeResult('library_search', { books: ['A', 'B', 'C', 'D'] }), '館藏裡找到 4 本，有《A》、《B》、《C》等。');
-  assert.equal(describeResult('library_search', { books: [] }), '沒有找到相關的書，可以換個書名或作者再試一次。');
+  assert.equal(describeResult('library_search', { books: [] }), '館藏查無相關的書，可以換個書名或作者再試一次。');
   // 關鍵字過濾（搜尋頁沒有功能，改由網頁端過濾首頁書單）
   assert.equal(
     describeResult('library_search', { books: ['歡迎光臨錢天堂 : 神奇柑仔店大圖鑑', '底層邏輯'] }, { keyword: '柑仔店' }),
     '館藏裡找到 1 本，有《歡迎光臨錢天堂》。',
   );
   assert.ok(
-    describeResult('library_search', { books: ['底層邏輯'] }, { keyword: '東野圭吾' }).includes('沒有找到「東野圭吾」'),
+    describeResult('library_search', { books: ['底層邏輯'] }, { keyword: '東野圭吾' }).includes('館藏查無「東野圭吾」'),
+  );
+  // 車號比對：示範站不管查什麼都回同一套帳單，要在網頁端比對
+  const bills = [{ 繳費期限: '2024/12/31', 繳費金額: 'NT$60', 車號: 'ABC–123' }]; // en dash，模擬畫面實況
+  assert.ok(describeResult('parking_fee', { bills }, { plate: 'XYZ-999' }).includes('查無車號 XYZ-999'));
+  assert.equal(
+    describeResult('parking_fee', { bills }, { plate: 'ABC-123' }),
+    '查到 1 筆，共 60 元，最早的期限是 2024 年 12 月 31 日。',
   );
 });
 
