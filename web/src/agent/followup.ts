@@ -33,12 +33,14 @@ export function planFollowUp(
   if (!target) return null;
   const items = result[next.when];
   if (!Array.isArray(items) || items.length === 0) return null;
+  // 停車費：示範站查無此車牌時也會回別台車的帳單，比對車號後沒有剩下的就不問（見 describe.ts）
+  const vars = resultVars(script.id, result, slots);
+  if (vars.count === '0') return null;
 
   const carried: Record<string, string> = {};
   for (const key of Object.keys(target.slots)) {
     if (slots[key]) carried[key] = slots[key];
   }
-  const vars = resultVars(script.id, result);
   return {
     script: target,
     ask: next.ask,
