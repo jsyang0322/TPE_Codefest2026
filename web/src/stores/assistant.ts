@@ -4,7 +4,7 @@
 import { defineStore } from 'pinia';
 import { bridge } from '../bridge';
 import type { TaskScript } from '../bridge/types';
-import { answer, normalizeSlot, understand } from '../agent';
+import { answer, describeResult, matchCommand, normalizeSlot, understand } from '../agent';
 
 export type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'running';
 
@@ -115,6 +115,10 @@ export const useAssistant = defineStore('assistant', {
         while (!slots[key] && tries < 2) {
           await this.say(spec.ask);
           const reply = await this.listen();
+          // 先判斷「停止」「再說一次」，不是指令才當成答案（規則見 agent/keywords.ts）
+          const command = reply ? matchCommand(reply) : null;
+          if (command === 'stop') return this.say('好的，先停在這裡，需要時再按按鈕叫我。');
+          if (command === 'repeat') continue; // 重念問題，不算聽不懂
           const value = reply ? normalizeSlot(script, key, reply) : null;
           if (value) slots[key] = value;
           tries += 1;
@@ -131,7 +135,7 @@ export const useAssistant = defineStore('assistant', {
         });
         const result = (reply.result ?? {}) as Record<string, unknown>;
         this.task.status = 'done';
-        this.task.result = Object.values(result).map(String).join('\n');
+        this.task.result = describeResult(script.id, result);
         this.phase = 'idle';
       } catch (error) {
         const code = (error as { code?: string }).code;
