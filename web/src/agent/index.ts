@@ -19,7 +19,7 @@ import { slotsFromText } from './normalize';
 import { fallbackAnswer, faqPrompt, pickFaqs, taskPrompt, taskUserPrompt, type FaqFile } from './prompts';
 import { parseTaskOutput } from './validate';
 
-export { describeResult } from './describe';
+export { describeResult, foundNothing } from './describe';
 export { matchCommand, matchYesNo } from './keywords';
 export { normalizeSlot } from './normalize';
 

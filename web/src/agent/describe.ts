@@ -54,9 +54,13 @@ function shortTitle(title: string): string {
   return title.split(/\s[:=]\s/)[0].trim();
 }
 
+/** 示範站的搜尋頁沒有功能，腳本改讀首頁書單，再用關鍵字在這裡過濾 */
+function matchBooks(books: string[], keyword?: string): string[] {
+  return keyword ? books.filter((title) => title.includes(keyword)) : books;
+}
+
 function describeBooks(books: string[], keyword?: string): string {
-  // 示範站的搜尋頁沒有功能，腳本改讀首頁書單，再用關鍵字在這裡過濾
-  const hits = keyword ? books.filter((title) => title.includes(keyword)) : books;
+  const hits = matchBooks(books, keyword);
   if (hits.length === 0) {
     return keyword
       ? `館藏查無「${keyword}」這本書，可以換個書名或作者再試一次。`
@@ -88,6 +92,20 @@ export function resultVars(scriptId: string, result: Record<string, unknown>, sl
     return { count: String(bills.length), total: String(billsTotal(bills)) };
   }
   return {};
+}
+
+/**
+ * 查無結果：車號不符、館藏沒有這本書。
+ * 這時服務頁上是示範站的範例資料（別台車的帳單、首頁書單），會誤導使用者，畫面要先關掉服務頁再念結果。
+ */
+export function foundNothing(scriptId: string, result: Record<string, unknown>, slots: Record<string, string> = {}): boolean {
+  if (scriptId === 'parking_fee' && Array.isArray(result.bills)) {
+    return matchBills(result.bills as Bill[], slots.plate).length === 0;
+  }
+  if (scriptId === 'library_search' && Array.isArray(result.books)) {
+    return matchBooks(result.books as string[], slots.keyword).length === 0;
+  }
+  return false;
 }
 
 /** 依腳本 id 把結果轉成一句話；沒有專用規則的腳本，把文字結果串起來 */

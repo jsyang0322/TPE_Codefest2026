@@ -1,7 +1,7 @@
 // 執行：node --test src/agent/   （Node 22.18 以上可直接跑 .ts）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describeResult } from './describe.ts';
+import { describeResult, foundNothing } from './describe.ts';
 
 // 示範服務站停車費頁實際讀回的資料（2026/11/7 用 runner.js 實測）
 const bills = [
@@ -87,4 +87,15 @@ test('繳費完成', () => {
     }),
     '繳費完成，用悠遊付繳了 510 元。',
   );
+});
+
+test('查無結果才關服務頁：車號不符、館藏沒有這本書', () => {
+  const bills = [{ 繳費期限: '2024/12/31', 繳費金額: 'NT$60', 車號: 'ABC–123' }];
+  assert.equal(foundNothing('parking_fee', { bills }, { plate: 'XYZ-999' }), true);
+  assert.equal(foundNothing('parking_fee', { bills }, { plate: 'ABC-123' }), false);
+  assert.equal(foundNothing('library_search', { books: ['底層邏輯'] }, { keyword: '小王子' }), true);
+  assert.equal(foundNothing('library_search', { books: ['小王子'] }, { keyword: '小王子' }), false);
+  // 瀏覽器模擬回文字、其他腳本：不關
+  assert.equal(foundNothing('parking_fee', { bills: '（瀏覽器模擬）查到 2 筆' }), false);
+  assert.equal(foundNothing('counter_calling', { counters: [] }), false);
 });

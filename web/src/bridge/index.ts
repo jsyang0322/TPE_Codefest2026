@@ -143,6 +143,8 @@ export const bridge = {
       onPartial: (r) => onStep?.(Number(r.step), String(r.say ?? '')),
     }),
   stopTask: () => send('run_task', { action: 'stop' }),
+  /** 關掉任務頁、回到助手（查無結果時用）；任務頁已經關了就不做事 */
+  closeTask: () => send('run_task', { action: 'close' }),
 
   userinfo: () => callBuiltin<UserInfo>('userinfo'),
   openLink: (url: string) => send('open_link', url),
