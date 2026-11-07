@@ -47,6 +47,14 @@ const phaseIcon: Record<string, string> = {
       {{ phaseLabel[assistant.phase] }}
     </p>
 
+    <!-- 模型狀態：載入中提示進度；評審問「AI 在哪裡跑」時也看得到 -->
+    <p v-if="assistant.llmState === 'loading'" class="text-base text-grayscale-600" role="status">
+      手機上的 AI 模型載入中{{ assistant.llmProgress !== null ? `（${assistant.llmProgress}%）` : '' }}，先可以用下方按鈕選擇要辦的事。
+    </p>
+    <p v-else-if="assistant.llmState === 'missing'" class="text-base text-red-600" role="status">
+      這支手機還沒有 AI 模型檔，目前只能用按鈕和關鍵字操作。
+    </p>
+
     <!-- 字幕：使用者說的話、助手念的話都顯示在這裡（聽障者也能使用） -->
     <section class="tp-card min-h-32 p-5" aria-label="字幕" aria-live="polite">
       <p v-if="assistant.caption" class="text-2xl leading-relaxed font-semibold break-words">

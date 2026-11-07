@@ -111,7 +111,12 @@ export const bridge = {
   speak: (text: string, rate?: number) => request('tts_speak', { text, rate }, { timeoutMs: 60000 }),
   stopSpeaking: () => send('tts_speak', { action: 'stop' }),
 
-  llmStatus: () => request('llm_status', {}, { timeoutMs: 120000 }).then((r) => r.state as 'missing' | 'loading' | 'ready'),
+  /** App 立刻回覆目前狀態並在背景載入模型；要等到 ready 請用 stores 的輪詢 */
+  llmStatus: () =>
+    request('llm_status', {}, { timeoutMs: 10000 }).then((r) => ({
+      state: r.state as 'missing' | 'loading' | 'ready',
+      progress: typeof r.progress === 'number' ? r.progress : null,
+    })),
   ask: (system: string, prompt: string, onPartial?: (text: string) => void, maxTokens = 150) =>
     request('llm_ask', { system, prompt, maxTokens }, {
       timeoutMs: 60000,
