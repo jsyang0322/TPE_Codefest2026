@@ -120,6 +120,7 @@ cd web && npm run build && firebase deploy --only hosting
 | 路邊停車費繳費規定（期限、管道、催繳、優惠） | 臺北市停車管理工程處 | <https://pma.gov.taipei> | 規定問答（任務 B），打包於 `web/src/data/faq/parking_fee.json` | 開放資料（政府網站公開資訊） |
 | 圖書借閱規定（冊數、借期、續借、逾期、預約） | 臺北市立圖書館 | <https://tpml.gov.taipei> | 規定問答（任務 B），打包於 `web/src/data/faq/library.json` | 開放資料（政府網站公開資訊） |
 | 台北通客服、1999 市民當家熱線 | 臺北市政府 | <https://id.taipei/tpcd> | 規定問答（任務 B），打包於 `web/src/data/faq/townpass.json` | 開放資料（政府網站公開資訊） |
+| 臺北市各區戶政事務所等候人數（取用名稱、地址、電話） | 臺北市政府民政局 | <https://data.taipei/dataset/detail?id=3b9856c9-d26b-4089-95ad-bc4c5908461e> | 規定問答（任務 B），打包於 `web/src/data/faq/household_registration.json` | 開放資料（data.taipei，政府資料開放授權條款第 1 版） |
 | 停車費、圖書借閱、臨櫃叫號服務頁內容 | 官方示範服務站（台北通開源專案） | <https://taipei-pass-service.vercel.app> | 腳本自動操作的對象 | 模擬（官方假資料） |
 | 使用者個資（姓名、電話等） | TownPass `assets/mock_data/account.json` | — | 腳本代填基本資料 | 模擬（App 內建假資料） |
 
