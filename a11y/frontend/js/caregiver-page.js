@@ -131,10 +131,11 @@ function setPage(page, message) {
 function setMode(mode) {
   state.mode = mode;
   const elder = state.watching?.elderName ?? '對方';
+  $('phone-bar').hidden = !mode;
   $('btn-type').hidden = mode !== 'screen';
   $('btn-home').hidden = mode !== 'screen';
   $('watch-hint').textContent = mode === 'screen'
-    ? `點畫面上的位置，${elder} 的手機就會在同一個位置按一下；在畫面上拖曳或滾動滑鼠滾輪可以捲動。要填寫時，先點欄位，再按「幫忙打字」。送出、付款這類按鈕會先問 ${elder}，密碼請他自己輸入。`
+    ? `框框裡就是 ${elder} 的手機：點哪裡，他的手機就在同一個位置按一下；在畫面上拖曳或滾動滑鼠滾輪可以捲動。點到要填寫的欄位，框框下方會出現打字框。送出、付款這類按鈕會先問 ${elder}，密碼請他自己輸入。`
     : mode === 'web'
       ? `點畫面上的按鈕，就會在 ${elder} 的手機上按；點輸入框可以幫他填寫。送出、付款這類按鈕會先問 ${elder}，密碼請他自己輸入。`
       : '';
@@ -422,22 +423,19 @@ async function sendCommand(body, pendingText) {
   }
 }
 
-function scrollBy(direction) {
-  const height = state.mode === 'screen' && state.frame ? state.frame.height : state.size.height;
-  const dy = Math.round(height * 0.6) * direction;
-  sendCommand({ action: 'scroll', dy }, '');
-}
-
 // ---- 幫忙填寫 ----
 
-/** 台北通 App：填入家人手機上選取的欄位（先點欄位再按「幫忙打字」） */
-function openTypeDialog() {
+// 打字框在框框裡（像手機鍵盤）；打開時框框的畫面和按鈕列先不能按
+const typingBackground = () => [$('screen'), $('replay'), $('phone-bar')];
+
+/** 台北通 App：填入對方手機上選取的欄位。點到欄位時自動打開；也可以按按鈕列的「打字」 */
+function openTypeDialog(name = '') {
   if (state.mode !== 'screen') return;
-  state.input = { type: true, name: '' };
-  $('dlg-input-title').textContent = C.typeTitle;
+  state.input = { type: true, name };
+  $('dlg-input-title').textContent = name ? C.inputTitle(name) : C.typeTitle;
   showInputFields(false);
   $('input-text').value = '';
-  openDialog($('dlg-input'), { background: [$('main')] });
+  openDialog($('dlg-input'), { background: typingBackground() });
   $('input-text').focus();
 }
 
@@ -465,14 +463,14 @@ function openInput(el, nodeId) {
   } else {
     $('input-text').value = el.isContentEditable ? el.textContent : el.value ?? '';
   }
-  openDialog($('dlg-input'), { background: [$('main')] });
+  openDialog($('dlg-input'), { background: typingBackground() });
   (isSelect ? $('input-select') : $('input-text')).focus();
 }
 
 function closeInput() {
   if (!state.input) return;
   state.input = null;
-  closeDialog($('dlg-input'), { background: [$('main')] });
+  closeDialog($('dlg-input'), { background: typingBackground() });
 }
 
 function submitInput() {
@@ -508,7 +506,11 @@ const handlers = {
     if (isWatching(data)) showFrame(data.frame);
   },
   share_result(data) {
-    if (isWatching(data) && data.message) notify(data.message);
+    if (!isWatching(data) || !data.message) return;
+    notify(data.message);
+    // App 點到欄位時回「已點「姓名」…」（a11y_share_service.dart 的 _tapWeb）：直接打開打字框
+    const field = /^已點「(.+?)」/.exec(data.message);
+    if (field && !state.input) openTypeDialog(field[1]);
   },
 };
 
@@ -528,11 +530,9 @@ function init() {
   });
   const actions = {
     leave: leaveWatching,
-    'scroll-up': () => scrollBy(-1),
-    'scroll-down': () => scrollBy(1),
     'go-back': () => sendCommand({ action: 'back' }, '已請對方的手機回到上一頁…'),
     'input-cancel': closeInput,
-    'type-text': openTypeDialog,
+    'type-text': () => openTypeDialog(),
     'go-home': () => sendCommand({ action: 'home' }, '已請對方的手機回到台北通首頁…'),
     async logout() {
       await api('/api/auth/logout', { method: 'POST' }).catch(() => {});

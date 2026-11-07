@@ -38,8 +38,11 @@
       <p id="sharing-desc"></p>
       <p id="sharing-warning" class="note" hidden></p>
 
-      <h3>打開要辦的服務</h3>
-      <ul id="service-list" class="service-list"></ul>
+      <!-- 只有電腦瀏覽器測試時顯示（見 elder-page.js renderSharing） -->
+      <div id="services" hidden>
+        <h3>打開要辦的服務</h3>
+        <ul id="service-list" class="service-list"></ul>
+      </div>
 
       <button class="btn btn-danger" type="button" data-action="revoke">停止分享</button>
     </section>

@@ -69,10 +69,10 @@ index 19724fa..66ba56a 100644
        MyServiceItemId.dashboard,
 diff --git a/lib/service/a11y_share_service.dart b/lib/service/a11y_share_service.dart
 new file mode 100644
-index 0000000..ba9c168
+index 0000000..cdc7b21
 --- /dev/null
 +++ b/lib/service/a11y_share_service.dart
-@@ -0,0 +1,951 @@
+@@ -0,0 +1,958 @@
 +import 'dart:async';
 +import 'dart:convert';
 +import 'dart:io';
@@ -178,9 +178,15 @@ index 0000000..ba9c168
 +  // ---- 開始、停止 ----
 +
 +  /// 長輩同意後，無障礙輔助網頁送來這次的 token。同一個 token 再送一次不會重來（打開網頁時都會送）。
-+  void start({required String token, required String caregiverName, required String elderName}) {
++  /// [goHome]：長輩剛按「同意」，回到台北通首頁（關掉無障礙輔助這一頁），家人一看到就是台北通本來的畫面。
++  void start({required String token, required String caregiverName, required String elderName, bool goHome = false}) {
 +    if (session.value?.token == token) {
 +      return;
++    }
++    if (goHome) {
++      // 等網頁的訊息處理完、這一格畫完再關頁面
++      SchedulerBinding.instance.addPostFrameCallback((_) => _home());
++      SchedulerBinding.instance.scheduleFrame();
 +    }
 +    stop();
 +    session.value = A11yShareSession(token: token, caregiverName: caregiverName, elderName: elderName);
@@ -809,7 +815,8 @@ index 0000000..ba9c168
 +    if (info['password'] == true) {
 +      return '這是密碼欄位，請 ${current.elderName} 自己輸入。';
 +    }
-+    return field ? '已點「$label」，可以按「幫忙打字」幫忙填寫。' : '已按下「$label」。';
++    // 「已點「…」」開頭時，家人頁會自動打開打字框（caregiver-page.js 的 share_result）
++    return field ? '已點「$label」，請在打字框輸入要填的內容。' : '已按下「$label」。';
 +  }
 +
 +  Map<String, dynamic> _jsResult(Object? raw) {
@@ -1242,10 +1249,10 @@ index f71d113..cface39 100644
        },
 diff --git a/lib/util/web_message_handler/a11y_share_message_handler.dart b/lib/util/web_message_handler/a11y_share_message_handler.dart
 new file mode 100644
-index 0000000..ac852ff
+index 0000000..349c340
 --- /dev/null
 +++ b/lib/util/web_message_handler/a11y_share_message_handler.dart
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,56 @@
 +import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 +import 'package:town_pass/service/a11y_share_service.dart';
 +import 'package:town_pass/util/web_message_handler/tp_web_message_handler.dart';
@@ -1273,7 +1280,9 @@ index 0000000..ac852ff
 +      onReply?.call(replyWebMessage(data: false));
 +      return;
 +    }
-+    service.start(token: token, caregiverName: caregiverName, elderName: elderName);
++    // go_home：長輩剛按「同意」，關掉無障礙輔助回到台北通首頁，家人直接操作台北通
++    final bool goHome = message is Map && message['go_home'] == true;
++    service.start(token: token, caregiverName: caregiverName, elderName: elderName, goHome: goHome);
 +    onReply?.call(replyWebMessage(data: true));
 +  }
 +
@@ -1323,10 +1332,10 @@ index 3ccbed9..bc4b9a7 100644
    static List<TPWebMessageHandler> get messageHandler => _cachedMessageHandlers;
 diff --git a/test/a11y_share_test.dart b/test/a11y_share_test.dart
 new file mode 100644
-index 0000000..86b3af9
+index 0000000..fe68097
 --- /dev/null
 +++ b/test/a11y_share_test.dart
-@@ -0,0 +1,227 @@
+@@ -0,0 +1,244 @@
 +import 'package:flutter/material.dart';
 +import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 +import 'package:flutter_test/flutter_test.dart';
@@ -1508,6 +1517,23 @@ index 0000000..86b3af9
 +    expect(home['message'], '已回到台北通首頁。');
 +    expect(find.text('第二頁'), findsNothing);
 +    expect((await command(tester, {'command_id': 'c10', 'action': 'home'}))['message'], '已經在台北通首頁了。');
++  });
++
++  testWidgets('長輩剛按「同意」：回到台北通首頁；重新打開無障礙輔助（同一個 token）不會被關掉', (tester) async {
++    await tester.pumpWidget(app());
++    await tester.tap(find.text('打開第二頁')); // 代表長輩正在看的無障礙輔助頁
++    await tester.pumpAndSettle();
++    expect(find.text('第二頁'), findsOneWidget);
++
++    service.start(token: 't1', caregiverName: '王小美', elderName: '王阿伯', goHome: true);
++    await tester.pumpAndSettle();
++    expect(find.text('第二頁'), findsNothing);
++
++    await tester.tap(find.text('打開第二頁'));
++    await tester.pumpAndSettle();
++    service.start(token: 't1', caregiverName: '王小美', elderName: '王阿伯', goHome: true);
++    await tester.pumpAndSettle();
++    expect(find.text('第二頁'), findsOneWidget);
 +  });
 +
 +  testWidgets('長輩按「停止分享」：先確認，確定後結束', (tester) async {

@@ -37,13 +37,7 @@
     <section id="view-watch" hidden aria-labelledby="watch-title">
       <h2 id="watch-title" tabindex="-1"></h2>
       <p id="watch-page" class="watch-page"></p>
-      <div class="watch-controls" role="group" aria-label="操作對方的畫面">
-        <button class="btn btn-secondary" type="button" data-action="scroll-up">往上</button>
-        <button class="btn btn-secondary" type="button" data-action="scroll-down">往下</button>
-        <button class="btn btn-secondary" type="button" data-action="go-back">上一頁</button>
-        <button id="btn-home" class="btn btn-secondary" type="button" data-action="go-home" hidden>回到首頁</button>
-        <button id="btn-type" class="btn btn-primary watch-type" type="button" data-action="type-text" hidden>幫忙打字</button>
-      </div>
+      <!-- 框框 = 對方的手機：畫面、手機下方的按鈕列、打字框都在框框裡。捲動直接在畫面上拖曳或滾動滾輪 -->
       <div id="stage" class="stage">
         <p id="stage-empty" class="stage-empty"></p>
         <!-- 台北通 App 拍下的整個畫面：網頁的部分是另外拍的截圖，疊在上面 -->
@@ -54,24 +48,31 @@
         </div>
         <!-- 電腦測試的模擬服務頁：rrweb 重播網頁 -->
         <div id="replay" class="replay" hidden></div>
+        <!-- 打字框：點到對方畫面上的欄位時，像手機鍵盤一樣出現在框框下方 -->
+        <div id="dlg-input" class="type-panel" role="group" aria-labelledby="dlg-input-title" hidden>
+          <h2 id="dlg-input-title" tabindex="-1"></h2>
+          <form id="input-form" class="input-form">
+            <label id="input-text-label" for="input-text">要填的內容</label>
+            <textarea id="input-text" rows="2" maxlength="500" autocomplete="off"></textarea>
+            <label id="input-select-label" for="input-select" hidden>選擇</label>
+            <select id="input-select" hidden></select>
+            <div class="type-actions">
+              <button class="btn btn-primary" type="submit">填入</button>
+              <button class="btn btn-secondary" type="button" data-action="input-cancel">取消</button>
+            </div>
+          </form>
+        </div>
+        <!-- 手機下方的按鈕列 -->
+        <div id="phone-bar" class="phone-bar" role="group" aria-label="操作對方的手機" hidden>
+          <button class="phone-btn" type="button" data-action="go-back">上一頁</button>
+          <button id="btn-home" class="phone-btn" type="button" data-action="go-home" hidden>首頁</button>
+          <button id="btn-type" class="phone-btn" type="button" data-action="type-text" hidden>打字</button>
+        </div>
       </div>
       <p id="watch-hint" class="muted"></p>
-      <button class="btn btn-secondary" type="button" data-action="leave">回到首頁</button>
+      <button class="btn btn-secondary" type="button" data-action="leave">不看了，回到我的首頁</button>
     </section>
   </main>
-
-  <!-- 對話框：幫忙填寫 -->
-  <div id="dlg-input" class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-input-title" hidden>
-    <h2 id="dlg-input-title" tabindex="-1"></h2>
-    <form id="input-form" class="input-form">
-      <label id="input-text-label" for="input-text">要填的內容</label>
-      <textarea id="input-text" rows="2" maxlength="500" autocomplete="off"></textarea>
-      <label id="input-select-label" for="input-select" hidden>選擇</label>
-      <select id="input-select" hidden></select>
-      <button class="btn btn-primary" type="submit">填入</button>
-      <button class="btn btn-secondary" type="button" data-action="input-cancel">取消</button>
-    </form>
-  </div>
 
   <div id="announce-polite" class="visually-hidden" aria-live="polite"></div>
   <div id="announce-assertive" class="visually-hidden" aria-live="assertive"></div>

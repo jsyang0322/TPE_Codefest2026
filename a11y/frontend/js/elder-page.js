@@ -169,19 +169,20 @@ async function answerLink(body) {
     return;
   }
   closeLinkDialog();
-  if (res.result === 'accept') await enterSharing(res.link).catch(handleError);
+  if (res.result === 'accept') await enterSharing(res.link, { goHome: true }).catch(handleError);
   else focusOn($('page-title'));
   voice.say(res.speak);
 }
 
 // ---- 分享畫面 ----
 
-async function enterSharing(link) {
+/** goHome：長輩剛按「同意」。重新打開這一頁時（恢復分享）不跳走，長輩才能回來用這一頁 */
+async function enterSharing(link, { goHome = false } = {}) {
   const isNew = state.sharing?.linkId !== link.link_id;
   if (isNew) {
     const share = await api('/api/share/start', { method: 'POST', body: { link_id: link.link_id } });
     // 每次打開這一頁都再交給 App 一次：App 重開後也能恢復分享
-    const mode = await startSharing(share);
+    const mode = await startSharing(share, { goHome });
     state.sharing = { linkId: link.link_id, caregiverName: link.caregiver.name, mode };
   }
   leaveCode();
@@ -199,7 +200,10 @@ function renderSharing() {
   $('sharing-warning').hidden = mode !== 'unsupported';
   $('sharing-warning').textContent = mode === 'unsupported' ? C.sharingUnsupported : '';
 
-  const services = SERVICES.filter((service) => (inApp ? true : !service.app));
+  // 在台北通裡：同意後 App 已經回到首頁，家人直接操作台北通，不需要這份清單。
+  // 電腦瀏覽器測試沒有 App，只能用模擬服務頁示範，所以只在瀏覽器裡顯示
+  $('services').hidden = inApp;
+  const services = SERVICES.filter((service) => !service.app);
   $('service-list').replaceChildren(
     ...services.map((service) => {
       const item = document.createElement('li');

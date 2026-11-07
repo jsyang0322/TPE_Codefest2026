@@ -13,7 +13,7 @@ const STORAGE_KEY = 'a11y.share';
  * 開始分享。share 是後端 POST /api/share/start 的回覆。
  * 回傳 'app'（台北通已開始分享整個畫面）、'browser'（電腦測試）或 'unsupported'（這個版本的台北通還沒有這個功能）。
  */
-export async function startSharing(share) {
+export async function startSharing(share, { goHome = false } = {}) {
   if (!inApp) {
     const config = {
       server: location.origin,
@@ -32,6 +32,8 @@ export async function startSharing(share) {
     token: share.token,
     caregiver_name: share.caregiver_name,
     elder_name: share.elder_name,
+    // 長輩剛按「同意」時為 true：App 關掉這一頁回到台北通首頁，家人一看到就是台北通本來的畫面
+    go_home: goHome,
   });
   return ok ? 'app' : 'unsupported';
 }
