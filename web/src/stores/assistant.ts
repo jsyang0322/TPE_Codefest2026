@@ -7,6 +7,7 @@ import type { TaskScript } from '../bridge/types';
 import {
   answer,
   describeResult,
+  foundNothing,
   matchCommand,
   matchYesNo,
   nextTask,
@@ -417,6 +418,8 @@ export const useAssistant = defineStore('assistant', {
         task.status = 'done';
         task.result = describeResult(script.id, result, slots);
         this.phase = 'idle';
+        // 查無結果：服務頁上是示範站的範例資料，先關掉、回到助手再念結果
+        if (foundNothing(script.id, result, slots)) bridge.closeTask();
         // 摘要句（查到 N 筆共 X 元）只有網頁算得出來，由網頁念；
         // 腳本的 stop 已改成短句「查詢完成」，App 端不會重複念到內容
         if (task.result) await this.say(task.result);
