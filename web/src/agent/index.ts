@@ -14,9 +14,9 @@ import librarySearch from './scripts/library_search.json';
 import parkingFee from './scripts/parking_fee.json';
 import parkingFeePay from './scripts/parking_fee_pay.json';
 import { planFollowUp, type FollowUp } from './followup';
-import { looksLikeQuestion, matchScript } from './keywords';
-import { matchOption } from './normalize';
-import { fallbackAnswer, faqPrompt, taskPrompt, taskUserPrompt, type FaqFile } from './prompts';
+import { routeByKeywords } from './keywords';
+import { slotsFromText } from './normalize';
+import { fallbackAnswer, faqPrompt, pickFaqs, taskPrompt, taskUserPrompt, type FaqFile } from './prompts';
 import { parseTaskOutput } from './validate';
 
 export { describeResult } from './describe';
@@ -48,9 +48,11 @@ export function nextTask(
   return planFollowUp(script, result, slots, followUpScripts);
 }
 
-/** web/src/data/faq/ 底下所有 JSON，建置時打包 */
-const faqs = Object.values(
-  import.meta.glob<FaqFile>('../data/faq/*.json', { eager: true, import: 'default' }),
+/** web/src/data/faq/ 底下所有 JSON，建置時打包；key 是檔名（parking_fee、library…），挑相關資料用 */
+const faqs = Object.fromEntries(
+  Object.entries(import.meta.glob<FaqFile>('../data/faq/*.json', { eager: true, import: 'default' })).map(
+    ([path, faq]) => [path.replace(/^.*\/|\.json$/g, ''), faq],
+  ),
 );
 
 export type Intent =
@@ -58,39 +60,45 @@ export type Intent =
   | { kind: 'question'; question: string }
   | { kind: 'unknown' };
 
-/** LLM 不可用或輸出不能用時，用關鍵字挑腳本；有說到的選項（汽車／機車）順便填上 */
-function keywordIntent(text: string): Intent {
-  const id = matchScript(text, Object.keys(scripts));
-  // 像問句就交給任務 B：模型沒準備好時，answer() 會說明，而不是回「聽不懂」
-  if (!id) return looksLikeQuestion(text) ? { kind: 'question', question: text } : { kind: 'unknown' };
-  const script = scripts[id];
-  const slots: Record<string, string> = {};
-  for (const [key, spec] of Object.entries(script.slots)) {
-    const option = spec.options && matchOption(spec.options, text);
-    if (option) slots[key] = option;
-  }
-  return { kind: 'task', script, slots };
+/** 用關鍵字判斷；判斷不了回傳 null */
+function keywordIntent(text: string): Intent | null {
+  const route = routeByKeywords(text, Object.keys(scripts));
+  if (!route) return null;
+  if (route.kind === 'question') return { kind: 'question', question: text };
+  const script = scripts[route.id];
+  return { kind: 'task', script, slots: slotsFromText(script, text) };
 }
 
-/** 理解使用者說的一句話（任務 A） */
+/** 任務 A 只輸出一行 JSON，不用 150 */
+const TASK_MAX_TOKENS = 80;
+/** 任務 A 最多等多久；超過就當成聽不懂，請使用者再說一次（第二次會顯示任務大按鈕） */
+const TASK_TIMEOUT_MS = 15000;
+
+/**
+ * 理解使用者說的一句話。
+ * 先用關鍵字：常見的說法馬上就有結果，不用等手機上的 LLM；關鍵字判斷不了的才問 LLM（任務 A）。
+ */
 export async function understand(text: string): Promise<Intent> {
+  const quick = keywordIntent(text);
+  if (quick) return quick;
+
   let raw: string | null = null;
   try {
-    raw = await bridge.ask(taskPrompt(scripts), taskUserPrompt(text));
+    raw = await bridge.ask(taskPrompt(scripts), taskUserPrompt(text), undefined, TASK_MAX_TOKENS, TASK_TIMEOUT_MS);
   } catch {
-    // 模型還沒準備好或推論失敗，改用關鍵字
+    // 模型還沒準備好、推論失敗或太久
   }
   const output = raw ? parseTaskOutput(raw, scripts) : null;
 
   if (output?.task === 'question') return { kind: 'question', question: output.question || text };
   if (output && scripts[output.task]) return { kind: 'task', script: scripts[output.task], slots: output.slots };
-  return keywordIntent(text);
+  return { kind: 'unknown' };
 }
 
 /** 規定問答（任務 B）；模型不可用或沒有回答時，回傳固定的說明，不丟例外 */
 export async function answer(question: string, onPartial?: (text: string) => void): Promise<string> {
   try {
-    const text = (await bridge.ask(faqPrompt(faqs), question, onPartial)).trim();
+    const text = (await bridge.ask(faqPrompt(pickFaqs(faqs, question)), question, onPartial)).trim();
     return text || fallbackAnswer();
   } catch (error) {
     return fallbackAnswer((error as { code?: string }).code);

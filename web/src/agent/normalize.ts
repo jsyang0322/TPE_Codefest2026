@@ -116,3 +116,42 @@ export function normalizeSlot(script: TaskScript, key: string, value: string): s
   if (!normalized) return null;
   return spec.pattern && !new RegExp(spec.pattern).test(normalized) ? null : normalized;
 }
+
+/**
+ * 從一整句話找出車號：「幫我查停車費，車號 ABC 123」→「ABC-123」。
+ * 先把中文數字、全形轉掉、拿掉空白（「A B C 杠 一 二 三」），再找「字母和數字混合」的一段。
+ * 只回傳通過 pattern 的；找不到回傳 null，之後再問使用者。
+ */
+export function findPlate(text: string, pattern?: string): string | null {
+  const flat = text
+    .normalize('NFKC')
+    .toUpperCase()
+    .replace(/[零〇洞一幺么二兩两三四五六七八九]/g, (char) => CHINESE_DIGITS[char])
+    .replace(/\s+/g, '')
+    .replace(SEPARATOR, '-');
+  for (const candidate of flat.match(/[A-Z0-9]+(?:-[A-Z0-9]+)?/g) ?? []) {
+    if (!/[A-Z]/.test(candidate) || !/\d/.test(candidate)) continue;
+    const plate = normalizePlate(candidate);
+    if (plate && (!pattern || new RegExp(pattern).test(plate))) return plate;
+  }
+  return null;
+}
+
+/** 查書的關鍵字裡不該有這些字；有的話表示沒抽乾淨（「在圖書館查書」），之後再問使用者 */
+const NOT_A_BOOK = /圖書館|書|借|找|查/;
+
+/** 不用 LLM，從句子裡抽出腳本要的資料：選項（汽車／機車）、車號、書名 */
+export function slotsFromText(script: TaskScript, text: string): Record<string, string> {
+  const slots: Record<string, string> = {};
+  for (const [key, spec] of Object.entries(script.slots)) {
+    let value: string | null = null;
+    if (spec.options) value = matchOption(spec.options, text);
+    else if (key === 'plate') value = findPlate(text, spec.pattern);
+    else if (key === 'keyword') {
+      const keyword = extractKeyword(text);
+      value = keyword && !NOT_A_BOOK.test(keyword) ? keyword : null;
+    }
+    if (value) slots[key] = value;
+  }
+  return slots;
+}

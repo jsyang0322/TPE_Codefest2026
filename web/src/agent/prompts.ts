@@ -63,6 +63,24 @@ function faqItemText(item: Record<string, unknown>): string {
   return Object.values(item).map(String).join('：');
 }
 
+/**
+ * FAQ 檔名 → 問題裡出現哪些字就放這份。手機上的 LLM 要先讀完整段 prompt，
+ * 只放相關的資料，等待時間就短很多。沒列在這裡的檔案（townpass：台北通、1999）每次都放。
+ */
+const FAQ_TOPICS: Record<string, RegExp> = {
+  parking_fee: /停車|車位|拖吊|罰單/,
+  library: /圖書館|書|借|館藏|閱覽/,
+  household_registration: /戶政|戶籍|戶口|身分證|等候|叫號|排隊|號碼牌/,
+};
+
+/** 挑出和問題相關的 FAQ；一份都對不到（例如「敬老卡要怎麼申請」）就全部放 */
+export function pickFaqs(faqs: Record<string, FaqFile>, question: string): FaqFile[] {
+  const always = Object.keys(faqs).filter((name) => !FAQ_TOPICS[name]);
+  const matched = Object.keys(faqs).filter((name) => FAQ_TOPICS[name]?.test(question));
+  if (!matched.length) return Object.values(faqs);
+  return [...matched, ...always].map((name) => faqs[name]);
+}
+
 /** 任務 B 的 system prompt：資料來自 web/src/data/faq/ */
 export function faqPrompt(faqs: FaqFile[]): string {
   const sections = faqs

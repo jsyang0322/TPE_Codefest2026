@@ -60,3 +60,29 @@ const QUESTION = /[?？]|嗎|呢|怎麼|怎樣|如何|多少|幾點|哪裡|哪�
 export function looksLikeQuestion(text: string): boolean {
   return QUESTION.test(text);
 }
+
+// ---- 不問 LLM 就能判斷的句子 ----
+// 手機上的 LLM 要先讀完整段 prompt 才開始回答，一句話要等很久。
+// 常見的說法用關鍵字就能確定，直接處理；關鍵字判斷不了的才問 LLM。
+
+/** 明確要助手去做事的說法 */
+const REQUEST = /幫我|幫忙|我要|我想|替我|麻煩|請幫/;
+/** 有這些字是想知道規定，不是要辦事：「我想問停車費怎麼算」「我想知道圖書館幾點開」 */
+const ASKING = /問|知道|了解/;
+
+export type Route = { kind: 'task'; id: string } | { kind: 'question' } | null;
+
+/**
+ * 依序判斷：
+ * 1. 有腳本關鍵字＋要辦事的說法 → 腳本（「可以幫我查停車費嗎」雖然是問句，也是要辦事）
+ * 2. 像問句 → 規定問答（「停車費要怎麼繳」「圖書館幾點關門」）
+ * 3. 有腳本關鍵字 → 腳本（「停車費」「區公所現在叫到幾號」）
+ * 4. 都不是 → null，交給 LLM（「嗯…那個…」）
+ */
+export function routeByKeywords(text: string, scriptIds: string[]): Route {
+  const id = matchScript(text, scriptIds);
+  if (id && REQUEST.test(text) && !ASKING.test(text)) return { kind: 'task', id };
+  if (looksLikeQuestion(text)) return { kind: 'question' };
+  if (id) return { kind: 'task', id };
+  return null;
+}

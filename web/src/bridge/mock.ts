@@ -74,7 +74,13 @@ function mockLlmAnswer(system: string, prompt: string): string {
 }
 
 async function mockAsk(data: Record<string, unknown>, options: RequestOptions): Promise<BridgeReply> {
-  await wait(400);
+  // 網址加 ?llm=slow 時模擬手機上很慢的模型（20 秒），用來測逾時和「我想一下」
+  const delay = location.search.includes('llm=slow') ? 20000 : 400;
+  if (options.timeoutMs && delay > options.timeoutMs) {
+    await wait(options.timeoutMs);
+    return Promise.reject({ status: 'error', code: 'timeout' });
+  }
+  await wait(delay);
   const answer = mockLlmAnswer(String(data.system ?? ''), String(data.prompt ?? ''));
   for (let i = 4; i < answer.length; i += 4) {
     options.onPartial?.({ status: 'partial', text: answer.slice(0, i) });

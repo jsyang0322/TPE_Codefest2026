@@ -122,9 +122,10 @@ export const bridge = {
       progress: typeof r.progress === 'number' ? r.progress : null,
       message: typeof r.message === 'string' ? r.message : null,
     })),
-  ask: (system: string, prompt: string, onPartial?: (text: string) => void, maxTokens = 150) =>
+  /** timeoutMs：網頁最多等多久；逾時後 App 端的推論不會停（llm_ask 沒有停止動作） */
+  ask: (system: string, prompt: string, onPartial?: (text: string) => void, maxTokens = 150, timeoutMs = 60000) =>
     request('llm_ask', { system, prompt, maxTokens }, {
-      timeoutMs: 60000,
+      timeoutMs,
       onPartial: (r) => onPartial?.(String(r.text ?? '')),
     }).then((r) => String(r.text ?? '')),
 
