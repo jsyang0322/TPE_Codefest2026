@@ -36,14 +36,15 @@
 
 ```mermaid
 flowchart LR
-    subgraph Phone["手機（進入服務後可離線使用）"]
+    subgraph Phone["手機"]
         Web["微服務網頁<br/>(web/)"] <-- "flutterObject<br/>postMessage" --> App["城市通 App<br/>(Flutter, TownPass fork)"]
         App --> Model["裝置端模型<br/>語音辨識・LLM・朗讀"]
+        App -- "腳本自動操作" --> Svc["台北通服務頁"]
     end
     Data["開放資料<br/>data.taipei 等"] -. "開發時整理後打包" .-> Web
 ```
 
-語音辨識、LLM 推論與語音朗讀都在手機上執行，不使用後端。詳細設計見 [docs/系統設計文件.md](docs/系統設計文件.md)。
+使用者用說的提出需求，手機上的 LLM 理解後挑選預先寫好的腳本，自動操作台北通裡的服務。語音辨識、LLM 推論與語音朗讀都在手機上執行，不使用後端。詳細設計見 [docs/系統設計文件.md](docs/系統設計文件.md)。
 
 ## Repo 結構
 
