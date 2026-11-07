@@ -26,7 +26,6 @@ const SERVICES = [
   { title: '有話要說', url: 'https://taipei-pass-service.vercel.app/citizen-report/', app: true },
   { title: '臨櫃叫號', url: 'https://taipei-pass-service.vercel.app/counter-calling/', app: true },
   { title: '市政資訊儀表板', url: 'https://dashboard.gov.taipei/', app: true },
-  { title: '交通罰單（示範服務）', url: 'demo/fines.html' },
   { title: '模擬服務頁（測試用）', url: 'demo/service.html' },
 ];
 

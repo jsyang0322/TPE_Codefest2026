@@ -5,15 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>讓家人幫忙</title>
   <link rel="icon" href="data:,">
+  <!-- 在台北通 App 裡（App 一開始就放了 flutterObject）：不顯示網頁自己的標題列，用 App 的 -->
+  <script>if (window.flutterObject) document.documentElement.classList.add('in-app');</script>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/care.css">
 </head>
 <body class="care-elder">
-  <header class="hero hero-compact">
-    <div class="hero-inner">
-      <p class="hero-kicker">無障礙輔助</p>
-      <h1 id="page-title" tabindex="-1">讓家人幫忙</h1>
-    </div>
+  <header class="tp-appbar">
+    <h1 id="page-title" tabindex="-1">讓家人幫忙</h1>
   </header>
 
   <main id="main" class="page care">

@@ -5,16 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>幫家人操作</title>
   <link rel="icon" href="data:,">
+  <!-- 在台北通 App 裡（App 一開始就放了 flutterObject）：不顯示網頁自己的標題列，用 App 的 -->
+  <script>if (window.flutterObject) document.documentElement.classList.add('in-app');</script>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/care.css">
   <link rel="stylesheet" href="vendor/rrweb/replay.min.css">
 </head>
 <body class="care-caregiver">
-  <header class="hero hero-compact">
-    <div class="hero-inner">
-      <p class="hero-kicker">無障礙輔助</p>
-      <h1 id="page-title" tabindex="-1">幫家人操作</h1>
-    </div>
+  <header class="tp-appbar">
+    <h1 id="page-title" tabindex="-1">幫家人操作</h1>
   </header>
 
   <main id="main" class="page care">
@@ -49,8 +48,12 @@
         </div>
         <button class="btn btn-secondary btn-small" type="button" data-action="leave">不看了</button>
       </div>
-      <!-- 框框 = 對方的手機：畫面、手機下方的按鈕列、打字框都在框框裡。捲動直接在畫面上拖曳或滾動滾輪 -->
+      <!--
+        框框 = 對方的手機：畫面、打字框、手機下方的按鈕列都在框框裡。捲動直接在畫面上拖曳或滾動滾輪。
+        看畫面時整個螢幕給框框用（頁面不捲動），對方的畫面等比例縮到 stage-view 裡一次看得完（caregiver-page.js 的 fitScreen）
+      -->
       <div id="stage" class="stage">
+       <div id="stage-view" class="stage-view">
         <p id="stage-empty" class="stage-empty"></p>
         <!-- 台北通 App 拍下的整個畫面：網頁的部分是另外拍的截圖，疊在上面 -->
         <div id="screen" class="screen" hidden>
@@ -60,6 +63,7 @@
         </div>
         <!-- 電腦測試的模擬服務頁：rrweb 重播網頁 -->
         <div id="replay" class="replay" hidden></div>
+       </div>
         <!-- 打字框：點到對方畫面上的欄位時，像手機鍵盤一樣出現在框框下方 -->
         <div id="dlg-input" class="type-panel" role="group" aria-labelledby="dlg-input-title" hidden>
           <h2 id="dlg-input-title" tabindex="-1"></h2>

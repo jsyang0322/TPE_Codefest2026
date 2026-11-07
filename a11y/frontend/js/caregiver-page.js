@@ -160,26 +160,18 @@ function clearStage() {
   destroyReplayer();
   hideScreen();
   setMode(null);
-  $('stage').style.width = '';
 }
 
-// 框框（手機外框）左右各 10px、下方按鈕列約 64px
-const BEZEL = 20;
-const BAR = 64;
-
-const wideScreen = window.matchMedia('(min-width: 900px)');
-
-/** 框框裡的畫面最寬可以多寬：寬螢幕手機在右邊一欄；窄螢幕不超過這一頁的寬度 */
-function stageMaxWidth() {
-  if (wideScreen.matches) return 560;
-  const main = $('main');
-  const padding = parseFloat(getComputedStyle(main).paddingLeft) * 2;
-  return Math.max(200, main.clientWidth - padding - BEZEL);
-}
-
-/** 框框跟著畫面一樣寬，打字框、按鈕列也一樣寬 */
-function setStageWidth(width) {
-  $('stage').style.width = `${Math.floor(width) + BEZEL}px`;
+/**
+ * 對方的畫面可以放多大：看畫面時整個螢幕扣掉上方標題、訊息與下方按鈕列，剩下的就是 stage-view（care.css）。
+ * 畫面等比例縮到這裡面，一次看得完（家人也是用手機看，不能讓頁面捲動，拖曳要留給捲動對方的手機）。
+ */
+function stageBox() {
+  const view = $('stage-view');
+  const style = getComputedStyle(view);
+  const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+  const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  return { width: view.clientWidth - padX - 2, height: view.clientHeight - padY - 2 }; // 2 = 外框線
 }
 
 // ---- 台北通 App 的畫面 ----
@@ -209,13 +201,14 @@ function showFrame(frame) {
   fitScreen();
 }
 
-/** 整個手機畫面縮到一次看得完：寬度不超過畫面區，高度不超過視窗 */
+/** 整個手機畫面縮到一次看得完：寬、高都不超過 stage-view */
 function fitScreen() {
   if (!state.frame) return;
+  const box = stageBox();
+  if (box.width <= 0 || box.height <= 0) return;
   const ratio = state.frame.width / state.frame.height;
-  const width = Math.min(stageMaxWidth(), Math.max(240, (window.innerHeight - 24 - BEZEL - BAR) * ratio));
+  const width = Math.min(box.width, box.height * ratio);
   $('screen').style.width = `${Math.floor(width)}px`;
-  setStageWidth(width);
 }
 
 function hideScreen() {
@@ -367,13 +360,14 @@ function fit() {
   const replayer = state.replayer;
   if (!replayer?.wrapper) return;
   const { width, height } = state.size;
-  const scale = Math.min(1, stageMaxWidth() / width);
+  const box = stageBox();
+  if (box.width <= 0 || box.height <= 0) return;
+  const scale = Math.min(1, box.width / width, box.height / height);
   state.replayScale = scale;
   replayer.wrapper.style.transformOrigin = '0 0';
   replayer.wrapper.style.transform = `scale(${scale})`;
   $('replay').style.width = `${Math.floor(width * scale)}px`;
-  $('replay').style.height = `${Math.ceil(height * scale)}px`;
-  setStageWidth(width * scale);
+  $('replay').style.height = `${Math.floor(height * scale)}px`;
 }
 
 // ---- 點畫面 → 對方的手機執行 ----
@@ -583,10 +577,13 @@ function init() {
     const button = event.target.closest('[data-action]');
     if (button) actions[button.dataset.action]?.();
   });
-  window.addEventListener('resize', () => {
+  // 畫面區變大變小（轉向、訊息出現、打字框打開）就重新縮放
+  const refit = () => {
     fit();
     fitScreen();
-  });
+  };
+  window.addEventListener('resize', refit);
+  if ('ResizeObserver' in window) new ResizeObserver(refit).observe($('stage-view'));
   $('screen').addEventListener('pointerdown', onScreenPointerDown);
   $('screen').addEventListener('pointermove', onScreenPointerMove);
   $('screen').addEventListener('pointerup', onScreenPointerUp);

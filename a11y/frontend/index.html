@@ -5,18 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>台北通無障礙輔助</title>
   <link rel="icon" href="data:,">
+  <!-- 在台北通 App 裡（App 一開始就放了 flutterObject）：不顯示網頁自己的標題列，用 App 的 -->
+  <script>if (window.flutterObject) document.documentElement.classList.add('in-app');</script>
   <link rel="stylesheet" href="css/base.css">
 </head>
 <body>
-  <header class="hero">
-    <div class="hero-inner">
-      <p class="hero-kicker">台北通</p>
-      <h1 id="page-title" tabindex="-1">無障礙輔助</h1>
-      <p>看不清楚、不方便打字，也能用台北通</p>
-    </div>
+  <header class="tp-appbar">
+    <h1 id="page-title" tabindex="-1">無障礙輔助</h1>
   </header>
 
   <main class="page">
+    <p class="lead">看不清楚、不方便打字，也能用台北通</p>
     <a class="tile" href="faq.html">
       <span class="icon-badge" aria-hidden="true">
         <svg viewBox="0 0 24 24" focusable="false"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2z" fill="currentColor"/></svg>

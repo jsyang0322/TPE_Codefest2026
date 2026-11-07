@@ -95,7 +95,6 @@ class State:
     shares: dict[str, ShareSession] = field(default_factory=dict)  # link_id → 分享
     audit: list[AuditEntry] = field(default_factory=list)
     code_failures: dict[str, list[datetime]] = field(default_factory=dict)  # 照顧者 id → 輸入錯誤的時間
-    fines: dict[str, list] = field(default_factory=dict)  # 示範服務「交通罰單」：長輩 id → 假罰單（fines.py）
 
 
 state = State()
