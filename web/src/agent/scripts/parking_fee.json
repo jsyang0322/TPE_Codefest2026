@@ -1,0 +1,17 @@
+{
+  "id": "parking_fee",
+  "description": "查詢路邊停車費",
+  "slots": {
+    "vehicle": { "ask": "請問是汽車還是機車？", "options": ["汽車", "機車"] },
+    "plate": { "ask": "請說車號，例如 ABC 1234。", "pattern": "^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$" }
+  },
+  "steps": [
+    { "open": "https://taipei-pass-service.vercel.app/fee-payment/detail/fee-5/" },
+    { "say": "正在幫您查詢停車費" },
+    { "click": { "text": "{vehicle}" } },
+    { "fill": { "near": "AAA-8888", "value": "{plate}" }, "say": "輸入車號 {plate}" },
+    { "click": { "text": "查詢" } },
+    { "read": { "selector": "TODO：PoC 時確認結果區塊", "as": "bills" } },
+    { "stop": "查到的停車費已經列在畫面上。要繳費，請按畫面上的繳費按鈕。" }
+  ]
+}
