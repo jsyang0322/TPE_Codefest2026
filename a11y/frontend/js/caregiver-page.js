@@ -1,6 +1,6 @@
 // 功能 B：照顧者（例如王小美）的頁面。
 //
-// - 輸入家人的 6 位數字碼，或用台北通掃描 QR code（QR code 是這一頁的網址，帶 ?code=）
+// - 輸入家人手機上的 6 位數字碼
 // - 家人同意後，看到家人在台北通打開的服務畫面（rrweb 重播，畫面一有變化就同步）
 // - 點畫面上的按鈕 → 家人的手機按下同一個按鈕；點輸入框 → 填好內容後送到家人的手機
 //   送出、付款這類重要按鈕，家人的手機會先問他同不同意；密碼欄位不能填
@@ -8,7 +8,6 @@
 
 import { closeDialog, focusOn, openDialog } from './a11y.js';
 import { api, clearLogin, getToken, getUser, requireLogin } from './api.js';
-import * as bridge from './bridge.js';
 import { C } from './strings.js';
 import { connectEvents } from './ws.js';
 
@@ -69,17 +68,6 @@ async function refresh() {
   );
 }
 
-/** QR code 內容是 caregiver.html?code=123456；也接受只有 6 位數字 */
-function codeFrom(text) {
-  try {
-    const code = new URL(text).searchParams.get('code');
-    if (/^\d{6}$/.test(code ?? '')) return code;
-  } catch {
-    // 不是網址
-  }
-  return String(text).match(/\b(\d{6})\b/)?.[1] ?? null;
-}
-
 async function submitCode(code) {
   if (!/^\d{6}$/.test(code)) {
     notify(C.badCode);
@@ -93,14 +81,6 @@ async function submitCode(code) {
   } catch (error) {
     handleError(error);
   }
-}
-
-async function scan() {
-  const text = await bridge.scanQrCode();
-  if (!text) return;
-  const code = codeFrom(text);
-  if (code) submitCode(code);
-  else notify(C.notBindQr);
 }
 
 // ---- 看對方的畫面 ----
@@ -367,7 +347,6 @@ const handlers = {
 function init() {
   if (!requireLogin()) return;
   $('me').textContent = getUser()?.name ?? '';
-  $('btn-scan').hidden = !bridge.inApp; // 掃描用台北通 App 內建的相機，一般瀏覽器沒有
 
   $('code-form').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -378,7 +357,6 @@ function init() {
     submitInput();
   });
   const actions = {
-    scan,
     leave: leaveWatching,
     'scroll-up': () => scrollBy(-1),
     'scroll-down': () => scrollBy(1),
@@ -406,12 +384,6 @@ function init() {
     onStatus: (connected) => ($('conn').hidden = connected),
   });
 
-  // 從 QR code 打開（caregiver.html?code=123456）：直接送出
-  const code = new URLSearchParams(location.search).get('code');
-  if (code) {
-    history.replaceState(null, '', location.pathname);
-    submitCode(code);
-  }
   focusOn($('page-title'));
 }
 

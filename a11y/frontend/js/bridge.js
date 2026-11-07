@@ -162,26 +162,9 @@ export function openInApp(url) {
   else window.location.href = url;
 }
 
-// ---- 撥電話、掃描 QR code（TownPass 內建的 Handler） ----
+// ---- 撥電話（TownPass 內建的 Handler） ----
 
 export function callPhone(number) {
   if (inApp) send('phone_call', number);
   else window.location.href = `tel:${number}`;
-}
-
-/** 打開台北通 App 的相機掃描 QR code，回傳掃到的文字；使用者按返回時回傳 null。只能在 App 裡使用。 */
-export function scanQrCode() {
-  if (!inApp) return Promise.resolve(null);
-  const flutter = window.flutterObject;
-  return new Promise((resolve) => {
-    // 內建訊息沒有 id：收到第一個同名回覆就結束
-    const onMessage = (event) => {
-      const msg = parse(event.data);
-      if (!msg || msg.name !== 'qr_code_scan') return;
-      flutter.removeEventListener('message', onMessage);
-      resolve(typeof msg.data === 'string' ? msg.data : null);
-    };
-    flutter.addEventListener('message', onMessage);
-    flutter.postMessage(JSON.stringify({ name: 'qr_code_scan', data: null }));
-  });
 }

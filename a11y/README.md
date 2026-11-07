@@ -30,7 +30,7 @@ frontend/*.html、js/*.js  ── GET /api/faq ──→ SQLite 資料庫 ←─
   執行點按、填寫  ←────────── 指令 ────────── POST /api/share/{id}/commands ←── 家人點畫面
 ```
 
-1. 長輩產生 6 位數字碼與 QR code（**5 分鐘**換一組、只能用一次；同一人輸入錯 5 次要等 1 分鐘），家人輸入後，長輩說或按「同意」。
+1. 長輩產生 6 位數字碼（**5 分鐘**換一組、只能用一次；同一人輸入錯 5 次要等 1 分鐘），家人輸入後，長輩說或按「同意」。
 2. 長輩的頁面把「rrweb 錄製程式＋分享程式（`frontend/js/share-agent.js`）＋token」交給 App，
    App 放進之後打開的每個服務網頁。電腦測試時，模擬服務頁（`frontend/demo/service.html`）自己載入分享程式。
 3. 分享程式用開源的 rrweb 記錄**頁面的結構與變化**（不是影片），手機與網路負擔都很小；密碼欄位不會被記錄。
@@ -119,14 +119,11 @@ node --test "tests/js/*.test.js"        # 前端的搜尋、語音指令、朗�
 | --- | --- | --- | --- |
 | FastAPI | 0.162.0 | MIT | 後端 API |
 | Uvicorn | 0.54.0 | BSD-3-Clause | 執行後端（含 WebSocket） |
-| qrcode | 8.2 | BSD | 後端產生 QR code 的 SVG |
 | rrweb（`@rrweb/record`、`@rrweb/replay`） | 2.1.7 | MIT | 分享畫面：記錄與重播網頁的變化。檔案放在 `frontend/vendor/rrweb/`（未修改，附 LICENSE） |
 | SQLite | Python 內建 | 公共領域 | 資料庫 |
 | pytest | 9.2.0 | MIT | 測試（不部署） |
 | httpx | 0.28.1 | BSD-3-Clause | 測試（不部署） |
 | mkcert | 1.4 以上 | BSD-3-Clause | 選用：在 Mac 上產生 https 憑證（不部署） |
-
-QR code 掃描用台北通 App 內建的 `qr_code_scan`。
 
 ## AI 使用聲明
 

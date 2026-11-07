@@ -11,7 +11,7 @@ function showStatus(id, ok, text) {
   el.className = ok ? 'ok' : 'bad';
 }
 
-// 從其他頁跳回來登入時，登入後回到原本那一頁（例如掃 QR code 打開的 caregiver.html?code=…）
+// 從其他頁跳回來登入時，登入後回到原本那一頁（例如還沒登入就打開 caregiver.html）
 function nextPage(defaultPage) {
   const next = new URLSearchParams(location.search).get('next') ?? '';
   const page = next.split('?')[0];

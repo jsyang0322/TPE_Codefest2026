@@ -32,7 +32,7 @@
 .link-list li { background: var(--white); border-radius: 8px; padding: 1rem; box-shadow: var(--shadow-card); }
 .link-list p { font-weight: 600; margin-bottom: 0.5rem; }
 
-/* 數字碼與 QR code */
+/* 數字碼 */
 .code {
   font-size: 3rem;
   font-weight: 700;
@@ -41,8 +41,6 @@
   font-variant-numeric: tabular-nums;
   margin: 0.5rem 0;
 }
-.qr { width: min(60vw, 14rem); margin: 0 auto 1rem; background: var(--white); padding: 0.5rem; border-radius: 8px; }
-.qr svg { display: block; width: 100%; height: auto; }
 
 /* 對話框：蓋住上方，不蓋住下方的說話區 */
 .dialog {

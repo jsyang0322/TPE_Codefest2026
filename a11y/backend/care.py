@@ -1,20 +1,17 @@
-"""功能 B：讓家人幫忙——數字碼與 QR code、授權、停止分享（規格第二部分第 5.3、5.4、8.5 節）。
+"""功能 B：讓家人幫忙——數字碼、授權、停止分享（規格第二部分第 5.3、5.4、8.5 節）。
 
 流程：
-1. 被照顧者產生 6 位數字碼與 QR code（5 分鐘有效、只能用一次）
-2. 照顧者輸入數字碼或掃描 QR code → 被照顧者手機問「王小美 想看你的畫面、幫你操作，同意嗎？」→ 同意後授權生效
+1. 被照顧者產生 6 位數字碼（5 分鐘有效、只能用一次）
+2. 照顧者輸入數字碼 → 被照顧者手機問「王小美 想看你的畫面、幫你操作，同意嗎？」→ 同意後授權生效
 3. 被照顧者開始分享畫面（share.py）：之後在台北通打開的服務網頁，照顧者都看得到，也能遠端點按、填寫
 4. 授權在被照顧者「這一次登入」期間有效：停止分享、登出、登入逾時都會立即結束
 """
 
-import re
 import secrets
 import uuid
 from datetime import timedelta
 
-import qrcode
-import qrcode.image.svg
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from . import auth, config, consent, share, store, templates
@@ -28,13 +25,6 @@ OPEN_LINK = ("pending", "active")
 
 def _name(user_id: str) -> str:
     return store.USERS[user_id]
-
-
-def _qr_svg(text: str) -> str:
-    """後端產生 QR code 的 SVG，網頁不需要另外載入套件。寬高交給 CSS 控制。"""
-    image = qrcode.make(text, image_factory=qrcode.image.svg.SvgPathImage, box_size=10, border=2)
-    svg = image.to_string(encoding="unicode")
-    return re.sub(r'\s(width|height)="[^"]*mm"', "", svg, count=2)
 
 
 def link_view(link: store.CareLink, viewer_id: str) -> dict:
@@ -60,7 +50,7 @@ def _link_for(link_id: str, user_id: str, *, as_elder: bool | None = None) -> st
     return link
 
 
-# ---- 1. 數字碼與 QR code ----
+# ---- 1. 數字碼 ----
 
 def _new_code() -> str:
     while True:
@@ -70,7 +60,7 @@ def _new_code() -> str:
 
 
 @router.post("/bind-codes")
-async def create_bind_code(request: Request, session: store.LoginSession = Depends(auth.current_session)) -> dict:
+async def create_bind_code(session: store.LoginSession = Depends(auth.current_session)) -> dict:
     """產生新的數字碼；同一位被照顧者的舊碼立即失效。"""
     state = store.state
     for code, bind_code in list(state.bind_codes.items()):
@@ -80,13 +70,8 @@ async def create_bind_code(request: Request, session: store.LoginSession = Depen
     code = _new_code()
     expires_at = store.now() + timedelta(seconds=config.BIND_CODE_TTL_SECONDS)
     state.bind_codes[code] = store.BindCode(code, session.user_id, session.token, expires_at)
-
-    # QR code 內容是照顧者頁的網址：用台北通掃描或手機相機掃描都能直接打開並帶入數字碼
-    url = f"{str(request.base_url).rstrip('/')}/caregiver.html?code={code}"
     return {
         "code": code,
-        "qr_svg": _qr_svg(url),
-        "qr_text": url,
         "expires_at": store.iso(expires_at),
         "ttl_seconds": config.BIND_CODE_TTL_SECONDS,
         "speak": templates.bind_code_speak(code),

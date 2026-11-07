@@ -94,7 +94,7 @@ def test_bind_code_lasts_five_minutes(client, people, clock):
     res = client.post("/api/care/bind-codes", headers=people["elder"]).json()
     assert res["ttl_seconds"] == 300
     assert len(res["code"]) == 6 and res["code"].isdigit()
-    assert res["qr_svg"].startswith("<svg") and f"code={res['code']}" in res["qr_text"]
+    assert set(res) == {"code", "expires_at", "ttl_seconds", "speak"}  # 只有數字碼，沒有 QR code
     assert "、".join(res["code"]) in res["speak"]  # 一個數字一個數字念
 
     clock.advance(minutes=4, seconds=59)

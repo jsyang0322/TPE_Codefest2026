@@ -1,6 +1,6 @@
 // 功能 B：被照顧者（例如王阿伯）的頁面。
 //
-// - 產生數字碼與 QR code（5 分鐘換一組）並念出來
+// - 產生 6 位數字碼（5 分鐘換一組）並念出來
 // - 家人輸入後，問「王小美 想看你的畫面、幫你操作，同意嗎？」
 // - 同意後開始分享：之後在台北通打開的服務網頁，家人都看得到，也能幫忙點按、填寫
 //   （分享程式由 App 放進服務網頁，見 share-script.js、share-agent.js）
@@ -94,7 +94,7 @@ async function refresh() {
   else if (state.view === 'sharing') leaveSharing();
 }
 
-// ---- 數字碼與 QR code ----
+// ---- 數字碼 ----
 
 async function showCode({ renewed = false } = {}) {
   let data;
@@ -108,7 +108,6 @@ async function showCode({ renewed = false } = {}) {
   const spaced = data.code.split('').join(' ');
   $('code-digits').textContent = spaced;
   $('code-digits').setAttribute('aria-label', `數字碼 ${spaced}`);
-  $('code-qr').innerHTML = data.qr_svg; // 後端用 qrcode 套件產生的 SVG，不含使用者輸入
   startCountdown('code', data.ttl_seconds, (left) => ($('code-countdown').textContent = C.codeCountdown(left)), () =>
     showCode({ renewed: true }),
   );

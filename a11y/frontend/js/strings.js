@@ -76,7 +76,6 @@ export const C = {
 
   waitingElder: '已送出，請家人在他的手機上同意。',
   badCode: '請輸入 6 位數字。',
-  notBindQr: '這不是授權用的 QR code。',
   inputTitle: (name) => `幫忙填寫「${name}」`,
   passwordBlocked: (elder) => `密碼請 ${elder} 自己輸入。`,
   sending: (label) => `已請對方的手機按「${label}」…`,
