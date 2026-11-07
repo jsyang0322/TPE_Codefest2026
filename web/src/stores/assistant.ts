@@ -15,6 +15,7 @@ import {
   type FollowUp,
 } from '../agent';
 import { isOnline } from '../composables/online';
+import { CONFIRM_LABELS, YES_NO_LABELS } from './choices';
 
 export type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'running';
 
@@ -73,6 +74,16 @@ export function save(state: Saved) {
 
 const restored = load();
 
+// ---- 選項按鈕 ----
+// 助手問是非題或選擇題時，畫面同時顯示大按鈕；按按鈕和用說的都能回答。
+// 給構音障礙、會場太吵、手機不支援離線聽寫的使用者用。
+// 這兩個變數不放進 state：它們是流程內部的暫存，不需要畫面反應、也不該被保存。
+
+/** listen() 正在等答案時，按鈕用這個直接把答案交給它 */
+let choiceResolve: ((text: string) => void) | null = null;
+/** 題目還在念的時候就按了按鈕：先存著，listen() 一開始就直接拿走 */
+let pendingChoice: string | null = null;
+
 export const useAssistant = defineStore('assistant', {
   state: () => ({
     phase: 'idle' as Phase,
@@ -96,6 +107,8 @@ export const useAssistant = defineStore('assistant', {
      * 所以設這個旗標，say()、listen() 和各流程看到就收手。新的一輪（talk、任務按鈕）開始時重設。
      */
     cancelled: false,
+    /** 目前題目可以直接點的答案；空陣列表示不顯示按鈕 */
+    choices: [] as string[],
   }),
 
   getters: {
@@ -159,13 +172,31 @@ export const useAssistant = defineStore('assistant', {
       this.phase = 'idle';
     },
 
-    /** 聽一句話；失敗回傳空字串 */
+    /** 聽一句話；有顯示選項按鈕時，按按鈕也算回答。失敗回傳空字串 */
     async listen(): Promise<string> {
       if (this.cancelled) return '';
+      if (pendingChoice !== null) {
+        const text = pendingChoice;
+        pendingChoice = null;
+        this.log.push({ role: 'user', text });
+        return text;
+      }
       this.phase = 'listening';
-      this.caption = '';
+      // 不清空字幕：題目要一直看得到（聽障者靠字幕），使用者開口後才由即時辨識的文字換掉
+      let picked = false;
+      const byButton = new Promise<string>((resolve) => {
+        choiceResolve = (text) => {
+          picked = true;
+          resolve(text);
+        };
+      });
       try {
-        const text = await bridge.listen((partial) => (this.caption = partial));
+        const text = await Promise.race([
+          bridge.listen((partial) => {
+            if (!picked && partial) this.caption = partial;
+          }),
+          byButton,
+        ]);
         if (text) this.log.push({ role: 'user', text });
         return text;
       } catch (error) {
@@ -173,7 +204,37 @@ export const useAssistant = defineStore('assistant', {
         if (code === 'unavailable' || code === 'permission') this.voiceUnavailable = true;
         return '';
       } finally {
+        choiceResolve = null;
         this.phase = 'idle';
+      }
+    },
+
+    /** 顯示選項按鈕；換題時先清掉上一題沒用到的答案 */
+    showChoices(choices: string[]) {
+      pendingChoice = null;
+      this.choices = choices;
+    },
+
+    hideChoices() {
+      pendingChoice = null;
+      this.choices = [];
+    },
+
+    /** 使用者按了選項按鈕 */
+    pickChoice(text: string) {
+      if (!this.choices.includes(text)) return;
+      this.choices = [];
+      this.caption = text;
+      if (choiceResolve) {
+        // 正在聽：結束聆聽，直接用按鈕的答案
+        const resolve = choiceResolve;
+        choiceResolve = null;
+        bridge.stopListening();
+        resolve(text);
+      } else {
+        // 題目還在念：停止朗讀，listen() 一開始就會拿到這個答案
+        pendingChoice = text;
+        bridge.stopSpeaking();
       }
     },
 
@@ -226,8 +287,11 @@ export const useAssistant = defineStore('assistant', {
       for (const [key, spec] of Object.entries(script.slots)) {
         let tries = 0;
         while (!slots[key] && tries < 2) {
+          // 有固定選項的欄位（車種、付款方式）顯示按鈕；車號、書名這類自由回答不顯示
+          this.showChoices(spec.options ?? []);
           await this.say(spec.ask);
           const reply = await this.listen();
+          this.hideChoices();
           if (this.cancelled) return false; // 按了停止：不再問
           // 先判斷「停止」「再說一次」，不是指令才當成答案（規則見 agent/keywords.ts）
           const command = reply ? matchCommand(reply) : null;
@@ -248,12 +312,17 @@ export const useAssistant = defineStore('assistant', {
       return true;
     },
 
-    /** 問是非題；說「對」回傳 true，說「不」、取消或兩次都聽不懂回傳 false */
-    async askYesNo(question: string): Promise<boolean> {
+    /**
+     * 問是非題；說「對」回傳 true，說「不」、取消或兩次都聽不懂回傳 false。
+     * labels 是兩顆按鈕的文字，規則見 stores/choices.ts。
+     */
+    async askYesNo(question: string, labels: [string, string] = YES_NO_LABELS): Promise<boolean> {
       let tries = 0;
       while (tries < 2) {
+        this.showChoices(labels);
         await this.say(question);
         const reply = await this.listen();
+        this.hideChoices();
         if (this.cancelled) return false; // 按了停止：當成「不要」
         const command = reply ? matchCommand(reply) : null;
         if (command === 'stop') return false;
@@ -272,7 +341,7 @@ export const useAssistant = defineStore('assistant', {
       if (!(await this.askYesNo(next.ask))) return this.say('好的，需要的時候再跟我說。');
       const slots = { ...next.slots };
       if (!(await this.fillSlots(next.script, slots))) return;
-      if (!(await this.askYesNo(next.confirm(slots)))) return this.say('好的，先不幫您處理。');
+      if (!(await this.askYesNo(next.confirm(slots), CONFIRM_LABELS))) return this.say('好的，先不幫您處理。');
       await this.runScript(next.script, slots);
     },
 
@@ -326,6 +395,7 @@ export const useAssistant = defineStore('assistant', {
     /** 任何時候都可以停 */
     stop() {
       this.cancelled = true;
+      this.hideChoices();
       bridge.stopListening();
       bridge.stopSpeaking();
       if (this.phase === 'running') bridge.stopTask();
