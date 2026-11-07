@@ -1,0 +1,2 @@
+# 修改檔要保持原樣（換行符號不轉換），在 Mac 上才能 git apply
+*.patch -text

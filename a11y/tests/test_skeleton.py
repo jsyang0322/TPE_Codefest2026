@@ -29,7 +29,7 @@ def test_database_only_has_faq_tables(client):
     with db.transaction() as conn:
         tables = {row["name"] for row in db.fetch_all(conn, "SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"faqs", "faq_sync", "faq_logs"} <= tables
-    assert "users" not in tables  # 代操作不用資料庫
+    assert "users" not in tables  # 讓家人幫忙不用資料庫
 
 
 def test_init_twice_keeps_data(client):

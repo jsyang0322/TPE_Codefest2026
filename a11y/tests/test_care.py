@@ -1,4 +1,4 @@
-"""功能 B：登入、綁定、代操作同步、終止授權、同意、伺服器端確認。"""
+"""功能 B：登入、綁定、分享畫面、遠端操作、停止分享。"""
 
 from datetime import datetime, timedelta, timezone
 
@@ -47,33 +47,31 @@ def active_link(client, people):
     return link["link_id"]
 
 
-def start(client, people):
+def start_share(client, people):
     link_id = active_link(client, people)
-    session_id = client.post("/api/care/sessions", json={"link_id": link_id}, headers=people["care"]).json()["session_id"]
-    return link_id, session_id
-
-
-def ask_consent(client, people, session_id, plate="ABC-1234", amount=120):
-    return client.post("/api/consent/requests", headers=people["care"], json={
-        "session_id": session_id, "action_type": "pay_parking", "payload": {"plate": plate, "amount": amount},
-    })
-
-
-def approve(client, people, consent_id):
-    client.post(f"/api/consent/requests/{consent_id}/respond", json={"method": "tap", "accept": True, "step": "first"}, headers=people["elder"])
-    client.post(f"/api/consent/requests/{consent_id}/respond", json={"method": "tap", "accept": True, "step": "final"}, headers=people["elder"])
-    token = next(t for t in store.state.consent_tokens.values() if t.consent_id == consent_id)
-    return token.token
-
-
-def pay(client, people, session_id, token, amount=120, plate="ABC-1234"):
-    return client.post("/api/actions/pay-parking", headers=people["care"], json={
-        "plate": plate, "amount": amount, "acting_for": "elder-1", "session_id": session_id, "consent_token": token,
-    })
+    token = client.post("/api/share/start", json={"link_id": link_id}, headers=people["elder"]).json()["token"]
+    return link_id, token
 
 
 def housekeeping(client):
     client.portal.call(main.run_housekeeping_once)
+
+
+# rrweb 事件：Meta（type 4）後面接完整畫面（type 2），之後是畫面變化（type 3）
+META = {"type": 4, "data": {"href": "https://service.example/apply", "width": 390, "height": 844}, "timestamp": 1}
+FULL = {"type": 2, "data": {"node": {"type": 0, "childNodes": [], "id": 1}}, "timestamp": 2}
+
+
+def mutation(n):
+    return {"type": 3, "data": {"source": 0, "n": n}, "timestamp": 3 + n}
+
+
+def next_of(ws, type_):
+    """略過其他推播，等到指定類型的訊息。"""
+    while True:
+        message = ws.receive_json()
+        if message.get("type") == type_:
+            return message
 
 
 # ---- 登入 ----
@@ -141,13 +139,13 @@ def test_elder_accepts_or_rejects(client, people):
 
 
 def test_binding_again_replaces_old_link(client, people):
-    old_link, old_session = start(client, people)
+    old_link, _ = start_share(client, people)
     new_link = active_link(client, people)
     for who in ("elder", "care"):
         links = client.get("/api/care/links", headers=people[who]).json()["links"]
         assert [l["link_id"] for l in links] == [new_link]
     assert store.state.links[old_link].status == "replaced"
-    assert store.state.care_sessions[old_session].ended_at is not None
+    assert old_link not in store.state.shares  # 舊的分享一起結束
 
 
 def test_rejecting_new_link_keeps_old_one(client, people):
@@ -170,46 +168,20 @@ def test_only_elder_can_confirm(client, people):
     assert client.post(f"/api/care/links/{link['link_id']}/confirm", json={"accept": True}, headers=people["care"]).status_code == 403
 
 
+def test_elder_receives_confirm_request(client, people):
+    with client.websocket_connect(f"/ws?token={people['elder_token']}") as elder_ws:
+        client.post("/api/care/links", json={"code": new_code(client, people)}, headers=people["care"])
+        event = elder_ws.receive_json()
+        assert event["type"] == "link_confirm_requested"
+        assert event["data"]["caregiver_name"] == "王小美"
+        assert event["data"]["speak"].startswith("王小美 想看你的畫面、幫你操作，同意嗎？")
+
+
 def test_pending_link_expires(client, people, clock):
     link = client.post("/api/care/links", json={"code": new_code(client, people)}, headers=people["care"]).json()
     clock.advance(seconds=config.LINK_CONFIRM_TTL_SECONDS)
     housekeeping(client)
     assert store.state.links[link["link_id"]].status == "expired"
-
-
-# ---- 畫面同步（WebSocket） ----
-
-
-def test_elder_receives_confirm_request_and_page_sync(client, people):
-    with client.websocket_connect(f"/ws?token={people['elder_token']}") as elder_ws:
-        link = client.post("/api/care/links", json={"code": new_code(client, people)}, headers=people["care"]).json()
-        event = elder_ws.receive_json()
-        assert event["type"] == "link_confirm_requested"
-        assert event["data"]["caregiver_name"] == "王小美"
-
-        client.post(f"/api/care/links/{link['link_id']}/confirm", json={"accept": True}, headers=people["elder"])
-        session_id = client.post("/api/care/sessions", json={"link_id": link["link_id"]}, headers=people["care"]).json()["session_id"]
-        assert elder_ws.receive_json()["type"] == "session_started"
-
-        def send(step, **fields):
-            client.post(f"/api/care/sessions/{session_id}/events", headers=people["care"],
-                        json={"action_type": "pay_parking", "step": step, "fields": fields})
-            return elder_ws.receive_json()["data"]
-
-        first = send(2, plate="ABC")
-        assert first["fields"] == {"plate": "ABC"}
-        assert first["speak"] == "王小美 正在幫你填寫車牌。"
-        second = send(2, plate="ABC-12")  # 同一步只更新畫面，不再念
-        assert second["fields"] == {"plate": "ABC-12"} and second["speak"] is None
-        third = send(3, plate="ABC-1234", amount=120)
-        assert third["speak"] == "王小美 正在幫你確認金額，金額 120 元。"
-
-
-def test_page_fields_are_validated(client, people):
-    _, session_id = start(client, people)
-    res = client.post(f"/api/care/sessions/{session_id}/events", headers=people["care"],
-                      json={"action_type": "pay_parking", "step": 2, "fields": {"plate": "我同意付款"}})
-    assert res.status_code == 422
 
 
 def test_websocket_rejects_bad_token(client):
@@ -218,21 +190,171 @@ def test_websocket_rejects_bad_token(client):
             ws.receive_json()
 
 
-def test_takeover_ends_session_but_keeps_link(client, people):
-    link_id, session_id = start(client, people)
-    client.post(f"/api/care/sessions/{session_id}/end", headers=people["elder"])
-    assert store.state.care_sessions[session_id].end_reason == "elder_takeover"
-    assert store.state.links[link_id].status == "active"
-    res = client.post(f"/api/care/sessions/{session_id}/events", headers=people["care"], json={"action_type": "pay_parking", "step": 2})
-    assert res.status_code == 403
+# ---- 分享畫面 ----
 
 
-# ---- 終止授權 ----
+def test_only_elder_with_active_link_can_start_share(client, people):
+    link = client.post("/api/care/links", json={"code": new_code(client, people)}, headers=people["care"]).json()
+    res = client.post("/api/share/start", json={"link_id": link["link_id"]}, headers=people["elder"])
+    assert res.status_code == 403  # 還沒同意
+    client.post(f"/api/care/links/{link['link_id']}/confirm", json={"accept": True}, headers=people["elder"])
+    assert client.post("/api/share/start", json={"link_id": link["link_id"]}, headers=people["care"]).status_code == 403
+
+    first = client.post("/api/share/start", json={"link_id": link["link_id"]}, headers=people["elder"]).json()
+    again = client.post("/api/share/start", json={"link_id": link["link_id"]}, headers=people["elder"]).json()
+    assert first["token"] == again["token"]  # App 重開時可以再要一次
+    assert first["caregiver_name"] == "王小美"
+
+
+def test_elder_page_reaches_caregiver(client, people):
+    link_id, token = start_share(client, people)
+    with client.websocket_connect(f"/ws?token={people['care_token']}") as care_ws, \
+            client.websocket_connect(f"/ws/share?token={token}") as agent:
+        assert agent.receive_json() == {"type": "hello", "caregiver_name": "王小美"}
+
+        agent.send_json({"type": "page", "url": "https://service.example/apply", "title": "申辦服務"})
+        page = next_of(care_ws, "share_page")["data"]
+        assert page["page"] == {"url": "https://service.example/apply", "title": "申辦服務"}
+
+        agent.send_json({"type": "events", "events": [META, FULL]})
+        assert next_of(care_ws, "share_events")["data"]["events"] == [META, FULL]
+        agent.send_json({"type": "events", "events": [mutation(1)]})
+        next_of(care_ws, "share_events")
+
+        view = client.get(f"/api/share/{link_id}", headers=people["care"]).json()
+        assert view["page"]["title"] == "申辦服務"
+        assert view["events"] == [META, FULL, mutation(1)]
+
+        agent.send_json({"type": "events", "events": [META, FULL]})  # 新的完整畫面：暫存從頭開始
+        next_of(care_ws, "share_events")
+        assert client.get(f"/api/share/{link_id}", headers=people["care"]).json()["events"] == [META, FULL]
+        assert client.get(f"/api/share/{link_id}", headers=people["elder"]).status_code == 403
+
+
+def test_caregiver_command_reaches_elder_page(client, people):
+    link_id, token = start_share(client, people)
+    with client.websocket_connect(f"/ws?token={people['care_token']}") as care_ws, \
+            client.websocket_connect(f"/ws/share?token={token}") as agent:
+        agent.receive_json()
+        res = client.post(f"/api/share/{link_id}/commands", json={"action": "click", "node_id": 12}, headers=people["care"])
+        assert res.status_code == 200
+        command = agent.receive_json()
+        assert command == {"type": "command", "command_id": res.json()["command_id"], "action": "click", "node_id": 12}
+
+        agent.send_json({"type": "result", "command_id": command["command_id"], "ok": False, "message": "王阿伯 不同意按「送出」"})
+        result = next_of(care_ws, "share_result")["data"]
+        assert result["ok"] is False and result["message"] == "王阿伯 不同意按「送出」"
+
+        client.post(f"/api/share/{link_id}/commands", json={"action": "input", "node_id": 7, "value": "王阿伯"}, headers=people["care"])
+        assert agent.receive_json()["value"] == "王阿伯"
+
+
+@pytest.mark.parametrize("body", [
+    {"action": "click"},
+    {"action": "input", "node_id": 3},
+    {"action": "input", "node_id": 3, "value": "字" * 501},
+    {"action": "scroll"},
+    {"action": "run_js", "node_id": 3},
+])
+def test_commands_are_validated(client, people, body):
+    link_id, _ = start_share(client, people)
+    assert client.post(f"/api/share/{link_id}/commands", json=body, headers=people["care"]).status_code == 422
+
+
+def test_only_caregiver_sends_commands_and_elder_must_be_on_page(client, people):
+    link_id, token = start_share(client, people)
+    body = {"action": "click", "node_id": 1}
+    res = client.post(f"/api/share/{link_id}/commands", json=body, headers=people["care"])
+    assert res.status_code == 409 and res.json()["message"] == "王阿伯 現在沒有打開網頁服務，沒辦法操作。"
+    with client.websocket_connect(f"/ws/share?token={token}") as agent:
+        agent.receive_json()
+        assert client.post(f"/api/share/{link_id}/commands", json=body, headers=people["elder"]).status_code == 403
+
+
+def test_share_socket_rejects_bad_token(client, people):
+    start_share(client, people)
+    with pytest.raises(Exception):
+        with client.websocket_connect("/ws/share?token=wrong") as agent:
+            agent.receive_json()
+
+
+def test_latest_page_is_the_one_shared(client, people):
+    link_id, token = start_share(client, people)
+    with client.websocket_connect(f"/ws?token={people['care_token']}") as care_ws, \
+            client.websocket_connect(f"/ws/share?token={token}") as below:
+        below.receive_json()
+        with client.websocket_connect(f"/ws/share?token={token}") as top:
+            top.receive_json()
+            below.send_json({"type": "events", "events": [META, FULL]})  # 被蓋住的頁面不轉送
+            top.send_json({"type": "events", "events": [META, FULL, mutation(1)]})
+            assert next_of(care_ws, "share_events")["data"]["events"][-1] == mutation(1)
+            client.post(f"/api/share/{link_id}/commands", json={"action": "back"}, headers=people["care"])
+            assert top.receive_json()["action"] == "back"
+        assert below.receive_json() == {"type": "snapshot"}  # 上面那頁關掉了，下面那頁重送完整畫面
+
+
+def test_leaving_the_page_tells_caregiver(client, people):
+    link_id, token = start_share(client, people)
+    with client.websocket_connect(f"/ws?token={people['care_token']}") as care_ws:
+        with client.websocket_connect(f"/ws/share?token={token}") as agent:
+            agent.receive_json()
+            agent.send_json({"type": "page", "url": "https://service.example/", "title": "服務"})
+            next_of(care_ws, "share_page")
+        left = next_of(care_ws, "share_page")["data"]
+        assert left["page"] is None
+        assert left["message"] == "王阿伯 現在沒有打開網頁服務。請他在台北通打開要辦的服務。"
+    assert client.get(f"/api/share/{link_id}", headers=people["care"]).json()["events"] == []
+
+
+def test_big_page_asks_for_new_snapshot(client, people, monkeypatch):
+    monkeypatch.setattr(config, "SHARE_BUFFER_MAX_BYTES", 300)
+    _, token = start_share(client, people)
+    with client.websocket_connect(f"/ws/share?token={token}") as agent:
+        agent.receive_json()
+        agent.send_json({"type": "events", "events": [META, FULL] + [mutation(i) for i in range(10)]})
+        assert agent.receive_json() == {"type": "snapshot"}
+
+
+def test_stop_from_elder_page_revokes_link(client, people):
+    link_id, token = start_share(client, people)
+    with client.websocket_connect(f"/ws?token={people['care_token']}") as care_ws, \
+            client.websocket_connect(f"/ws/share?token={token}") as agent:
+        agent.receive_json()
+        agent.send_json({"type": "stop"})
+        assert agent.receive_json() == {"type": "closed"}
+        closed = next_of(care_ws, "link_closed")["data"]
+        assert closed["reason"] == "revoked" and closed["speak"] == "王阿伯 已停止分享。"
+    assert store.state.links[link_id].status == "revoked"
+
+
+def test_link_shows_share_state(client, people):
+    _, token = start_share(client, people)
+    view = client.get("/api/care/links", headers=people["elder"]).json()["links"][0]
+    assert view["share"] == {"page": None, "on_page": False}
+    with client.websocket_connect(f"/ws/share?token={token}") as agent:
+        agent.receive_json()
+        view = client.get("/api/care/links", headers=people["care"]).json()["links"][0]
+        assert view["share"]["on_page"] is True
+
+
+def test_sharing_keeps_elder_login_alive(client, people, clock):
+    _, token = start_share(client, people)
+    with client.websocket_connect(f"/ws/share?token={token}") as agent:
+        agent.receive_json()
+        clock.advance(minutes=config.LOGIN_IDLE_MINUTES - 1)
+        agent.send_json({"type": "ping"})
+        assert agent.receive_json() == {"type": "pong"}
+        clock.advance(minutes=2)
+        housekeeping(client)
+    assert store.state.sessions[people["elder_token"]].ended_at is None
+
+
+# ---- 停止分享 ----
 
 
 @pytest.mark.parametrize("how", ["revoke", "logout", "idle"])
 def test_link_ends_on_revoke_logout_or_idle(client, people, clock, how):
-    link_id, session_id = start(client, people)
+    link_id, token = start_share(client, people)
     with client.websocket_connect(f"/ws?token={people['care_token']}") as care_ws:
         if how == "revoke":
             client.delete(f"/api/care/links/{link_id}", headers=people["elder"])
@@ -242,130 +364,26 @@ def test_link_ends_on_revoke_logout_or_idle(client, people, clock, how):
             clock.advance(minutes=config.LOGIN_IDLE_MINUTES, seconds=1)
             client.get("/api/auth/me", headers=people["care"])  # 照顧者還在使用
             housekeeping(client)
-        event = care_ws.receive_json()
-        assert event["type"] == "link_closed"
+        event = next_of(care_ws, "link_closed")
         assert event["data"]["reason"] == {"revoke": "revoked", "logout": "ended", "idle": "expired"}[how]
 
-    assert client.post("/api/care/sessions", json={"link_id": link_id}, headers=people["care"]).status_code == 403
-    assert ask_consent(client, people, session_id).status_code == 403
+    assert link_id not in store.state.shares
+    assert client.post(f"/api/share/{link_id}/commands", json={"action": "back"}, headers=people["care"]).status_code == 403
+    with pytest.raises(Exception):
+        with client.websocket_connect(f"/ws/share?token={token}") as agent:
+            agent.receive_json()
 
 
-# ---- 同意與伺服器端確認 ----
+def test_revoke_stops_elder_page(client, people):
+    link_id, token = start_share(client, people)
+    with client.websocket_connect(f"/ws/share?token={token}") as agent:
+        agent.receive_json()
+        res = client.delete(f"/api/care/links/{link_id}", headers=people["elder"]).json()
+        assert res["speak"] == "已停止分享，王小美 看不到你的畫面了。"
+        assert agent.receive_json() == {"type": "closed"}
 
 
-def test_consent_then_pay(client, people):
-    link_id, session_id = start(client, people)
-    res = ask_consent(client, people, session_id)
-    assert res.status_code == 200
-    body = res.json()
-    assert "voice_code" not in body  # 照顧者拿不到確認數字
-    assert body["level"] == "L2"
-    assert body["summary"] == "王小美 要幫你繳停車費，金額 120 元，車牌 ABC-1234。"
-
-    token = approve(client, people, body["consent_id"])
-    paid = pay(client, people, session_id, token)
-    assert paid.status_code == 200 and paid.json()["speak"] == "已幫你繳停車費 120 元。"
-    assert any(e.action == "pay_parking" for e in store.state.audit)
-
-
-def test_elder_gets_voice_code(client, people):
-    _, session_id = start(client, people)
-    with client.websocket_connect(f"/ws?token={people['elder_token']}") as elder_ws:
-        ask_consent(client, people, session_id)
-        event = elder_ws.receive_json()
-    assert event["type"] == "consent_requested"
-    code = event["data"]["voice_code"]
-    assert code and f"數字 {code}" in event["data"]["prompt_text"]
-
-
-def test_voice_consent_with_code(client, people):
-    _, session_id = start(client, people)
-    consent_id = ask_consent(client, people, session_id).json()["consent_id"]
-    code = store.state.consents[consent_id].voice_code
-    url = f"/api/consent/requests/{consent_id}/respond"
-
-    assert client.post(url, json={"method": "voice", "transcript": "同意"}, headers=people["elder"]).json()["result"] == "unknown"
-    res = client.post(url, json={"method": "voice", "transcript": f"同意{code}"}, headers=people["elder"]).json()
-    assert res["result"] == "accept"
-    assert store.state.consents[consent_id].method == "voice"
-
-
-@pytest.mark.parametrize("how", ["reject", "expire", "attempts"])
-def test_cannot_pay_without_consent(client, people, clock, how):
-    _, session_id = start(client, people)
-    consent_id = ask_consent(client, people, session_id).json()["consent_id"]
-    url = f"/api/consent/requests/{consent_id}/respond"
-    if how == "reject":
-        client.post(url, json={"method": "voice", "transcript": "不同意"}, headers=people["elder"])
-    elif how == "expire":
-        clock.advance(seconds=config.CONSENT_TTL_SECONDS)
-        housekeeping(client)
-    else:
-        for _ in range(config.CONSENT_MAX_VOICE_ATTEMPTS):
-            client.post(url, json={"method": "voice", "transcript": "嗯"}, headers=people["elder"])
-    assert store.state.consents[consent_id].status in ("rejected", "expired")
-    assert not store.state.consent_tokens
-    assert pay(client, people, session_id, "no-token").status_code == 403
-
-
-def test_tampered_amount_is_rejected(client, people):
-    _, session_id = start(client, people)
-    token = approve(client, people, ask_consent(client, people, session_id).json()["consent_id"])
-    res = pay(client, people, session_id, token, amount=1200)
-    assert res.status_code == 403
-    assert res.json()["error"] == "consent_payload_mismatch"
-
-
-def test_token_can_only_be_used_once(client, people):
-    _, session_id = start(client, people)
-    token = approve(client, people, ask_consent(client, people, session_id).json()["consent_id"])
-    assert pay(client, people, session_id, token).status_code == 200
-    assert pay(client, people, session_id, token).status_code == 403
-
-
-def test_token_expires_after_sixty_seconds(client, people, clock):
-    _, session_id = start(client, people)
-    token = approve(client, people, ask_consent(client, people, session_id).json()["consent_id"])
-    clock.advance(seconds=config.CONSENT_TOKEN_TTL_SECONDS)
-    assert pay(client, people, session_id, token).status_code == 403
-
-
-def test_token_is_void_after_link_closed(client, people):
-    link_id, session_id = start(client, people)
-    token = approve(client, people, ask_consent(client, people, session_id).json()["consent_id"])
-    client.delete(f"/api/care/links/{link_id}", headers=people["elder"])
-    assert pay(client, people, session_id, token).status_code == 403
-
-
-def test_l2_tap_needs_two_steps(client, people):
-    _, session_id = start(client, people)
-    consent_id = ask_consent(client, people, session_id).json()["consent_id"]
-    url = f"/api/consent/requests/{consent_id}/respond"
-    assert client.post(url, json={"method": "tap", "accept": True, "step": "final"}, headers=people["elder"]).status_code == 400
-    assert client.post(url, json={"method": "tap", "accept": True, "step": "first"}, headers=people["elder"]).json()["result"] == "confirm_again"
-    assert client.post(url, json={"method": "tap", "accept": True, "step": "final"}, headers=people["elder"]).json()["result"] == "accept"
-
-
-def test_forbidden_actions_for_caregiver(client, people):
-    _, session_id = start(client, people)
-    res = client.post("/api/consent/requests", headers=people["care"],
-                      json={"session_id": session_id, "action_type": "change_password", "payload": {}})
-    assert res.status_code == 403
-
-
-def test_elder_can_restore_state_after_reload(client, people):
-    link_id, session_id = start(client, people)
-    client.post(f"/api/care/sessions/{session_id}/events", headers=people["care"],
-                json={"action_type": "pay_parking", "step": 2, "fields": {"plate": "ABC-1234"}})
-    ask_consent(client, people, session_id)
-    view = client.get("/api/care/links", headers=people["elder"]).json()["links"][0]
-    assert view["session"]["last_page"]["fields"] == {"plate": "ABC-1234"}
-    assert view["pending_consent"]["voice_code"]
-    care_view = client.get("/api/care/links", headers=people["care"]).json()["links"][0]
-    assert "pending_consent" not in care_view
-
-
-# ---- 語音同意判斷（規格第二部分第 10 節任務 10） ----
+# ---- 語音回答判斷 ----
 
 
 @pytest.mark.parametrize(
@@ -385,9 +403,3 @@ def test_elder_can_restore_state_after_reload(client, people):
 )
 def test_parse_consent(transcript, code, expected):
     assert consent.parse_consent(transcript, code) == expected
-
-
-def test_voice_code_range():
-    for _ in range(200):
-        n = int(consent.new_voice_code())
-        assert 21 <= n <= 98 and n % 10 != 0

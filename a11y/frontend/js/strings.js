@@ -45,38 +45,40 @@ const countdown = (seconds) => {
   return m ? `還有 ${m} 分 ${s} 秒` : `還有 ${s} 秒`;
 };
 
-// 照顧者代操作。被照顧者在同意前聽到的重要內容（同意摘要、確認數字）一律由後端產生，這裡只有固定的引導句。
+// 讓家人幫忙（分享畫面）。被照顧者同意前聽到的內容由後端產生，這裡只有固定的引導句。
 export const C = {
   talkIdle: '按這裡說話',
   talkListening: '正在聽，請說話',
   talkStopHint: '說完會自動停止，也可以再按一次',
   noSpeech: '沒有聽到聲音。請再按一次，靠近手機說話。',
 
-  elderIntro: '這是讓家人幫忙的頁面。要讓家人幫你操作，請說「讓家人幫我」，或按畫面上的按鈕。',
+  elderIntro: '這是讓家人幫忙的頁面。要讓家人看你的畫面、幫你操作，請說「讓家人幫我」，或按畫面上的按鈕。',
   codeRenewed: (speak) => `數字已經換成新的。${speak}`,
   codeCountdown: (seconds) => `${countdown(seconds)}，時間到會自動換一組`,
   codeCancelled: '好的，已取消。',
-  linkConfirm: (name) => `${name} 要幫你操作，同意嗎？同意請說「同意」，不同意請說「不同意」。`,
+  linkTitle: (name) => `${name} 想看你的畫面、幫你操作，同意嗎？`,
+  linkConfirm: (name) => `${name} 想看你的畫面、幫你操作，同意嗎？同意請說「同意」，不同意請說「不同意」。`,
   linkTooManyTries: '沒有聽清楚。請按畫面上的「同意」或「不同意」。',
-  observeTitle: (name) => `${name} 正在幫你操作`,
-  stepLine: (page) => `第 ${page.step} 步，共 ${page.total_steps} 步：${page.step_name}`,
-  consentCountdown: (seconds) => `${countdown(seconds)}，沒有回答會自動取消`,
-  consentTimeUp: '已經超過時間。',
-  revokeAsk: (name) => `確定不讓 ${name} 幫你操作了嗎？確定請說「確定」，不要請說「取消」。`,
+  sharingTitle: (name) => `${name} 可以看你的畫面`,
+  sharingDesc: (name) =>
+    `請打開要辦的服務，${name} 會看到同一個畫面，也可以幫你點按、填寫。按到送出、付款這類重要按鈕前，會先問你。`,
+  sharingUnsupported: '這個版本的台北通還不能分享畫面，請更新台北通 App。',
+  revokeTitle: (name) => `確定不讓 ${name} 看你的畫面了嗎？`,
+  revokeAsk: (name) => `確定不讓 ${name} 看你的畫面了嗎？確定請說「確定」，不要請說「取消」。`,
   revokeCancelled: '好的，沒有停止。',
-  noLink: '目前沒有授權給任何人。',
+  noLink: '目前沒有分享給任何人。',
   notUnderstood: {
-    home: '我沒有聽懂。要讓家人幫你操作，請說「讓家人幫我」。',
+    home: '我沒有聽懂。要讓家人幫你，請說「讓家人幫我」。',
     code: '要再聽一次數字，請說「再說一次」；不要了請說「取消」。',
-    observe: '你可以說「停止授權」、「我自己來」，或「再說一次」。',
+    sharing: '要停止分享，請說「停止分享」；要再聽一次，請說「再說一次」。',
     revoke: '請說「確定」或「取消」。',
   },
 
   waitingElder: '已送出，請家人在他的手機上同意。',
-  waitingConsent: (name) => `已請 ${name} 確認付款，請稍候。`,
-  waitCountdown: countdown,
-  badPlate: '車牌格式不正確，例如 ABC-1234。',
   badCode: '請輸入 6 位數字。',
   notBindQr: '這不是授權用的 QR code。',
-  paidResult: (receipt) => `已完成付款（模擬），收據編號 ${receipt}。`,
+  inputTitle: (name) => `幫忙填寫「${name}」`,
+  passwordBlocked: (elder) => `密碼請 ${elder} 自己輸入。`,
+  sending: (label) => `已請對方的手機按「${label}」…`,
+  sendingInput: (name) => `已請對方的手機填寫「${name}」…`,
 };

@@ -1,6 +1,6 @@
-"""照顧者代操作的狀態：全部存在後端記憶體，不進資料庫。
+"""讓家人幫忙（綁定、授權、分享畫面）的狀態：全部存在後端記憶體，不進資料庫。
 
-後端重開後，登入、授權、同意紀錄都會消失，要重新登入、重新產生數字碼。
+後端重開後，登入、授權、分享都會消失，要重新登入、重新產生數字碼。
 授權本來就只在被照顧者這一次登入期間有效（規格第一部分第 4.2 節），所以不需要長期保存。
 
 後端只有一個程序，API 都是 async，在同一個事件迴圈裡依序執行，所以不需要加鎖。
@@ -62,45 +62,16 @@ class CareLink:
 
 
 @dataclass
-class CareSession:
-    id: str
+class ShareSession:
+    """被照顧者正在分享畫面。page 是目前打開的服務網頁；events 是從最近一次完整畫面開始的變化，
+    照顧者中途打開或重新整理時，用它把畫面補齊。"""
     link_id: str
-    started_at: datetime
-    last_event_at: datetime
-    ended_at: datetime | None = None
-    end_reason: str | None = None  # caregiver_end / elder_takeover / revoked / elder_logout / login_expired / idle_timeout
-    last_step: int | None = None
-    last_page: dict | None = None  # 最後一次同步的畫面，被照顧者重新整理時用來還原
-
-
-@dataclass
-class ConsentRequest:
-    id: str
-    link_id: str
-    session_id: str
-    level: str  # L1 / L2
-    action_type: str
-    payload: dict
-    payload_hash: str
-    summary: str
-    prompt_text: str
-    voice_code: str | None
+    token: str  # 被照顧者手機上的分享程式用這個連線
     created_at: datetime
-    expires_at: datetime
-    status: str = "pending"  # pending / approved / rejected / expired / cancelled
-    method: str | None = None  # tap / voice / biometric
-    voice_attempts: int = 0
-    tap_confirmed: bool = False
-    responded_at: datetime | None = None
-
-
-@dataclass
-class ConsentToken:
-    token: str
-    consent_id: str
-    expires_at: datetime
-    used_at: datetime | None = None
-    voided: bool = False
+    page: dict | None = None
+    events: list = field(default_factory=list)
+    events_bytes: int = 0
+    snapshot_requested_at: datetime | None = None
 
 
 @dataclass
@@ -109,8 +80,6 @@ class AuditEntry:
     link_id: str | None
     actor_id: str
     action: str
-    level: str
-    consent_id: str | None = None
     method: str | None = None
     detail: str | None = None
 
@@ -120,9 +89,7 @@ class State:
     sessions: dict[str, LoginSession] = field(default_factory=dict)
     bind_codes: dict[str, BindCode] = field(default_factory=dict)
     links: dict[str, CareLink] = field(default_factory=dict)
-    care_sessions: dict[str, CareSession] = field(default_factory=dict)
-    consents: dict[str, ConsentRequest] = field(default_factory=dict)
-    consent_tokens: dict[str, ConsentToken] = field(default_factory=dict)
+    shares: dict[str, ShareSession] = field(default_factory=dict)  # link_id → 分享
     audit: list[AuditEntry] = field(default_factory=list)
     code_failures: dict[str, list[datetime]] = field(default_factory=dict)  # 照顧者 id → 輸入錯誤的時間
 
@@ -136,5 +103,5 @@ def reset() -> None:
     state = State()
 
 
-def audit(link_id: str | None, actor_id: str, action: str, level: str = "L0", **extra) -> None:
-    state.audit.append(AuditEntry(now(), link_id, actor_id, action, level, **extra))
+def audit(link_id: str | None, actor_id: str, action: str, **extra) -> None:
+    state.audit.append(AuditEntry(now(), link_id, actor_id, action, **extra))

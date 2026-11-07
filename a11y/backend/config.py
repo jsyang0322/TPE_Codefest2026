@@ -20,17 +20,19 @@ FAQ_SYNC_INTERVAL_HOURS = 24        # 多久從官方網站同步一次
 FAQ_SYNC_RETRY_MINUTES = 10         # 同步失敗（例如沒有網路）時多久後再試
 FAQ_SYNC_TIMEOUT_SECONDS = 20       # 呼叫官方 API 的逾時
 
-# ---- 照顧者代操作：時間與次數 ----
+# ---- 讓家人幫忙：時間與次數 ----
 
 BIND_CODE_TTL_SECONDS = 300         # 綁定碼有效時間：5 分鐘，長輩唸給家人聽不用趕
 BIND_CODE_MAX_FAILURES = 5          # 同一人輸入錯誤幾次後要等一下（防止亂猜）
 BIND_CODE_LOCK_SECONDS = 60         # 輸入錯誤太多次要等多久
 LINK_CONFIRM_TTL_SECONDS = 120      # 照顧者輸入數字碼後，等被照顧者同意的時間
-CONSENT_TTL_SECONDS = 120           # 同意請求等待時間
-CONSENT_TOKEN_TTL_SECONDS = 60      # 同意 token 有效時間
-CONSENT_MAX_VOICE_ATTEMPTS = 3      # 語音同意最多嘗試次數
-CARE_SESSION_IDLE_MINUTES = 10      # 代操作閒置多久自動結束
 LOGIN_IDLE_MINUTES = 30             # 登入閒置多久自動登出（待團隊確認）
 VOICE_LISTEN_SECONDS = 8            # 系統問完問題後自動開麥克風的秒數（前端使用）
+
+# ---- 分享畫面 ----
+
+SHARE_BUFFER_MAX_BYTES = 4_000_000  # 後端最多暫存多少畫面資料；超過就請手機重新送一次完整畫面
+SHARE_SNAPSHOT_MIN_SECONDS = 10     # 兩次「請重新送完整畫面」之間至少隔幾秒
+SHARE_INPUT_MAX_LENGTH = 500        # 照顧者一次最多填幾個字
 
 HOUSEKEEPING_INTERVAL_SECONDS = 5   # 背景工作多久執行一次

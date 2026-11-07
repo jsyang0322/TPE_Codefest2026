@@ -1,4 +1,4 @@
-/* 照顧者代操作（被照顧者頁、照顧者頁）。共用的色票、按鈕、說話區在 base.css */
+/* 讓家人幫忙（被照顧者頁、照顧者頁）。共用的色票、按鈕、說話區在 base.css */
 
 .care-elder { --talk-height: 30vh; }   /* 被照顧者頁下方有說話區 */
 .care-caregiver { --talk-height: 0px; } /* 照顧者頁沒有 */
@@ -27,21 +27,6 @@
   font-weight: 600;
 }
 
-/* 代操作中的橫幅：固定在上方。secondary-500 配深灰字 8.3:1 */
-.banner {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--secondary-500);
-  color: var(--gray-800);
-  padding: 0.75rem 1rem;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
-}
-.banner-text { font-size: 1.222rem; font-weight: 700; margin: 0 0 0.5rem; }
-.banner-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-.banner .btn { min-height: 56px; }
-.banner .btn + .btn { margin-top: 0; }
-
 /* 授權列表 */
 .link-list { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.75rem; }
 .link-list li { background: var(--white); border-radius: 8px; padding: 1rem; box-shadow: var(--shadow-card); }
@@ -59,17 +44,6 @@
 .qr { width: min(60vw, 14rem); margin: 0 auto 1rem; background: var(--white); padding: 0.5rem; border-radius: 8px; }
 .qr svg { display: block; width: 100%; height: auto; }
 
-/* 步驟與表單 */
-.steps { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.25rem; }
-.steps li { padding: 0.5rem 0.75rem; border: 3px solid transparent; border-radius: var(--radius); color: var(--gray-600); }
-.steps li.done { color: var(--primary-700); }
-.steps li.current { border-color: var(--secondary-500); color: var(--gray-800); font-weight: 700; }
-.step-now { font-size: 1.333rem; font-weight: 700; }
-.field { display: grid; gap: 0.25rem; margin-bottom: 0.75rem; }
-.field label { font-weight: 600; }
-.field input[readonly] { background: var(--gray-100); }
-.amount { font-size: 1.333rem; }
-
 /* 對話框：蓋住上方，不蓋住下方的說話區 */
 .dialog {
   position: fixed;
@@ -84,30 +58,30 @@
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.2);
 }
 .dialog h2 { font-size: 1.556rem; }
-.summary { font-size: 1.333rem; font-weight: 600; }
-.voice-code {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: var(--primary-50);
-  border-radius: var(--radius);
-  padding: 0.75rem;
-  margin-bottom: 1rem;
-}
-.voice-code strong { font-size: 3rem; line-height: 1.1; color: var(--primary-800); }
 
-/* 訊息、結果、等待中 */
+/* 訊息 */
 .status-box { background: var(--primary-50); border-radius: var(--radius); padding: 0.75rem 1rem; font-weight: 600; }
 .status-box:empty { display: none; }
-.result { background: var(--primary-50); border-radius: var(--radius); padding: 0.75rem 1rem; font-weight: 600; }
-.result.error { background: var(--red-50); color: var(--red-600); }
-.wait { border: 2px dashed var(--secondary-500); border-radius: var(--radius); padding: 0.75rem 1rem; margin-bottom: 1rem; }
-.wait p { margin: 0; }
 .code-form { margin-bottom: 0.75rem; }
 .code-form label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
 
-/* demo 工具 */
-.demo-tools { margin: 1.5rem 0 1rem; border: 1px dashed var(--gray-200); border-radius: var(--radius); padding: 0 1rem; }
-.demo-tools summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
-.toggle { display: flex; align-items: center; gap: 0.75rem; min-height: 48px; cursor: pointer; }
-.toggle input { width: 28px; height: 28px; flex: none; accent-color: var(--primary-700); }
+/* 被照顧者：分享中 */
+.sharing-now { display: flex; align-items: center; gap: 0.75rem; background: var(--secondary-500); color: var(--gray-800); border-radius: var(--radius); padding: 0.75rem 1rem; margin-bottom: 0.75rem; }
+.sharing-now h2 { margin: 0; font-size: 1.333rem; }
+.live-dot { width: 14px; height: 14px; flex: none; border-radius: 50%; background: var(--red-600); }
+.service-list { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.5rem; }
+.service-list .btn { margin: 0; }
+
+/* 照顧者：對方的畫面 */
+.watch-page { font-weight: 600; color: var(--primary-800); overflow-wrap: anywhere; }
+.watch-controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 0.75rem; }
+.watch-controls .btn { margin: 0; min-height: 48px; padding: 0 0.5rem; }
+.stage { background: var(--gray-100); border: 2px solid var(--primary-500); border-radius: var(--radius); overflow: hidden; margin-bottom: 0.75rem; }
+.stage-empty { margin: 0; padding: 2rem 1rem; text-align: center; font-weight: 600; color: var(--gray-600); }
+.replay { position: relative; overflow: hidden; background: var(--white); }
+.replay .replayer-wrapper { position: absolute; top: 0; left: 0; }
+.replay iframe { border: 0; display: block; background: var(--white); }
+.input-form { display: grid; gap: 0.5rem; }
+.input-form label { font-weight: 600; }
+.input-form textarea, .input-form select { font: inherit; padding: 0.75rem; border: 2px solid var(--gray-200); border-radius: var(--radius); min-height: 48px; }
+.input-form .btn { margin: 0; }

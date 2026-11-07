@@ -125,6 +125,43 @@ function browserSpeak(text) {
   });
 }
 
+// ---- 分享畫面（TownPass 需要套用 a11y/townpass/ 的修改） ----
+
+/** 收到第一個同名回覆就結束（App 的回覆沒有 id）。App 沒有這個 Handler 時，逾時回傳 null。 */
+function oneShot(name, data, timeoutMs) {
+  const flutter = window.flutterObject;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    function finish(value) {
+      clearTimeout(timer);
+      flutter.removeEventListener('message', onMessage);
+      resolve(value);
+    }
+    function onMessage(event) {
+      const msg = parse(event.data);
+      if (msg?.name === name) finish(msg.data);
+    }
+    flutter.addEventListener('message', onMessage);
+    flutter.postMessage(JSON.stringify({ name, data }));
+  });
+}
+
+/** 請 App 把分享程式放進之後打開的每個服務網頁。成功回傳 true；App 還沒加這個功能時回傳 false。 */
+export async function startShareInApp(script) {
+  if (!inApp) return false;
+  return (await oneShot('a11y_share_start', { script }, 3000)) === true;
+}
+
+export function stopShareInApp() {
+  if (inApp) send('a11y_share_stop', null);
+}
+
+/** 在台北通裡打開另一個服務網頁（TownPass 內建的 open_link，會開新的網頁畫面） */
+export function openInApp(url) {
+  if (inApp) send('open_link', url);
+  else window.location.href = url;
+}
+
 // ---- 撥電話、掃描 QR code（TownPass 內建的 Handler） ----
 
 export function callPhone(number) {

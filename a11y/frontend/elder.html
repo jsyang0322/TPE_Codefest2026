@@ -9,15 +9,6 @@
   <link rel="stylesheet" href="css/care.css">
 </head>
 <body class="care-elder">
-  <!-- 代操作中固定在上方的橫幅（規格第一部分第 4.3 節） -->
-  <div id="banner" class="banner" hidden>
-    <p id="banner-text" class="banner-text"></p>
-    <div class="banner-actions">
-      <button class="btn btn-danger" type="button" data-action="revoke">終止授權</button>
-      <button class="btn btn-secondary" type="button" data-action="takeover">我自己來</button>
-    </div>
-  </div>
-
   <main id="main" class="page care">
     <header class="care-header">
       <h1 id="page-title" tabindex="-1">讓家人幫忙</h1>
@@ -26,11 +17,8 @@
     </header>
 
     <section id="view-home" aria-labelledby="page-title">
-      <p>家人可以用他的手機幫你操作台北通。付款這類重要的事，一定會先問你；你也隨時可以停止授權。</p>
-      <button class="btn btn-primary" type="button" data-action="invite">讓家人幫我操作</button>
-      <h2>可以幫你操作的家人</h2>
-      <p id="links-empty" class="muted">目前沒有。</p>
-      <ul id="links-list" class="link-list"></ul>
+      <p>家人可以用他的手機，看到你在台北通打開的服務畫面，也可以幫你點按、填寫。送出、付款這類重要的按鈕，一定會先問你；你也隨時可以停止分享。</p>
+      <button class="btn btn-primary" type="button" data-action="invite">讓家人幫我</button>
     </section>
 
     <section id="view-code" hidden aria-labelledby="code-title">
@@ -43,45 +31,37 @@
       <button class="btn btn-secondary" type="button" data-action="cancel-code">取消</button>
     </section>
 
-    <section id="view-observe" hidden aria-labelledby="observe-title">
-      <h2 id="observe-title" tabindex="-1"></h2>
-      <p id="observe-step" class="step-now"></p>
-      <div id="observe-form" class="card"></div>
-      <p id="observe-result" class="result" hidden></p>
+    <section id="view-sharing" hidden aria-labelledby="sharing-title">
+      <div class="sharing-now">
+        <span class="live-dot" aria-hidden="true"></span>
+        <h2 id="sharing-title" tabindex="-1"></h2>
+      </div>
+      <p id="sharing-desc"></p>
+      <p id="sharing-warning" class="note" hidden></p>
+
+      <h3>打開要辦的服務</h3>
+      <ul id="service-list" class="service-list"></ul>
+
+      <button class="btn btn-danger" type="button" data-action="revoke">停止分享</button>
     </section>
   </main>
 
-  <!-- 對話框：同意授權 -->
+  <!-- 對話框：同意讓家人看畫面 -->
   <div id="dlg-link" class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-link-title" aria-describedby="dlg-link-desc" hidden>
     <h2 id="dlg-link-title" tabindex="-1"></h2>
-    <p id="dlg-link-desc">同意後，他可以幫你操作台北通。付款等重要操作，還是會先問你。</p>
+    <p id="dlg-link-desc">同意後，他可以看到你在台北通打開的服務畫面，也可以幫你點按、填寫。送出、付款這類重要的按鈕，還是會先問你。</p>
     <button class="btn btn-primary" type="button" data-action="link-accept">同意</button>
     <button class="btn btn-secondary" type="button" data-action="link-reject">不同意</button>
   </div>
 
-  <!-- 對話框：同意請求（付款等） -->
-  <div id="dlg-consent" class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-consent-title" aria-describedby="dlg-consent-summary" hidden>
-    <h2 id="dlg-consent-title" tabindex="-1">請你確認</h2>
-    <p id="dlg-consent-summary" class="summary"></p>
-    <div id="dlg-consent-code" class="voice-code">
-      <span>確認數字</span>
-      <strong id="dlg-consent-code-value"></strong>
-      <span class="small">用說的同意時，請說「同意」再說這個數字</span>
-    </div>
-    <p id="dlg-consent-countdown" class="muted"></p>
-    <p id="dlg-consent-status" class="status-box"></p>
-    <button id="btn-consent-accept" class="btn btn-primary" type="button" data-action="consent-accept"></button>
-    <button class="btn btn-secondary" type="button" data-action="consent-reject">不同意</button>
-  </div>
-
-  <!-- 對話框：終止授權確認 -->
+  <!-- 對話框：停止分享確認 -->
   <div id="dlg-revoke" class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-revoke-title" hidden>
     <h2 id="dlg-revoke-title" tabindex="-1"></h2>
     <button class="btn btn-danger" type="button" data-action="revoke-confirm">確定停止</button>
     <button class="btn btn-secondary" type="button" data-action="revoke-cancel">取消</button>
   </div>
 
-  <!-- 下方說話區：說「讓家人幫我」「停止授權」「我自己來」「同意」等 -->
+  <!-- 下方說話區：說「讓家人幫我」「同意」「停止分享」等 -->
   <div class="talk-area">
     <form id="mock-mic" class="mock-mic" hidden>
       <label for="mock-input">（電腦測試）用打字代替說話</label>

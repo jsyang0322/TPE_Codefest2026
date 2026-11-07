@@ -32,18 +32,19 @@ test('其他指令', () => {
   assert.deepEqual(parseCommand('看全部問題', ALL), { type: 'all' });
 });
 
-test('照顧者代操作的指令', () => {
-  const observe = ['revoke', 'takeover', 'repeat'];
-  assert.deepEqual(parseCommand('停止授權', observe), { type: 'revoke' });
-  assert.deepEqual(parseCommand('不要讓他操作了', observe), { type: 'revoke' });
-  assert.deepEqual(parseCommand('我自己來就好', observe), { type: 'takeover' });
+test('讓家人幫忙的指令', () => {
+  const sharing = ['revoke', 'repeat'];
+  assert.deepEqual(parseCommand('停止分享', sharing), { type: 'revoke' });
+  assert.deepEqual(parseCommand('我不要分享了', sharing), { type: 'revoke' });
+  assert.deepEqual(parseCommand('不要讓他看了', sharing), { type: 'revoke' });
+  assert.deepEqual(parseCommand('停止授權', sharing), { type: 'revoke' });
 
   const confirmDialog = ['confirm', 'cancel', 'repeat'];
   assert.deepEqual(parseCommand('確定', confirmDialog), { type: 'confirm' });
   assert.deepEqual(parseCommand('不確定', confirmDialog), { type: 'cancel' });
   assert.deepEqual(parseCommand('取消', confirmDialog), { type: 'cancel' });
-  // 「取消授權」在觀看畫面是停止授權，不是取消
-  assert.deepEqual(parseCommand('取消授權', ['revoke', 'cancel']), { type: 'revoke' });
+  // 「取消分享」是停止分享，不是取消
+  assert.deepEqual(parseCommand('取消分享', ['revoke', 'cancel']), { type: 'revoke' });
 
   assert.deepEqual(parseCommand('我想讓家人幫我', ['invite']), { type: 'invite' });
 });

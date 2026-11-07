@@ -1,0 +1,197 @@
+diff --git a/lib/page/city_service/model/my_service_model.dart b/lib/page/city_service/model/my_service_model.dart
+index df00c0c..4f62ec0 100644
+--- a/lib/page/city_service/model/my_service_model.dart
++++ b/lib/page/city_service/model/my_service_model.dart
+@@ -1,5 +1,6 @@
+ import 'package:flutter/material.dart';
+ import 'package:town_pass/gen/assets.gen.dart';
++import 'package:town_pass/service/a11y_share_service.dart';
+ 
+ // 先於 MyServiceItemId enum 加入新服務；
+ // 再在 MyServiceIdExt 擴充中加入該服務的 MyServiceItem 物件。
+@@ -9,6 +10,7 @@ import 'package:town_pass/gen/assets.gen.dart';
+ 
+ enum MyServiceItemId {
+   voiceAgent,
++  a11y,
+   dedicatedLine,
+   districtOffice,
+   reportIssue,
+@@ -46,6 +48,15 @@ extension MyServiceIdExt on MyServiceItemId {
+           destinationUrl: 'https://tpe-codefest2026.web.app',
+           forceWebViewTitle: 'AI 語音助手',
+         ),
++      MyServiceItemId.a11y => MyServiceItem(
++          title: '無障礙輔助',
++          description: '用講的問常見問題、讓家人看畫面幫忙',
++          icon: Assets.svg.iconFamilyCenter.svg(),
++          category: MyServiceCategory.cityService,
++          // 無障礙輔助網頁（TPE_Codefest2026/a11y），用 --dart-define=A11Y_URL=... 指定網址
++          destinationUrl: A11yShareService.serviceUrl,
++          forceWebViewTitle: '無障礙輔助',
++        ),
+       MyServiceItemId.dedicatedLine => MyServiceItem(
+           title: '1999',
+           description: '播打網路語音通話',
+diff --git a/lib/page/city_service/widget/pinned_service_widget_controller.dart b/lib/page/city_service/widget/pinned_service_widget_controller.dart
+index 19724fa..66ba56a 100644
+--- a/lib/page/city_service/widget/pinned_service_widget_controller.dart
++++ b/lib/page/city_service/widget/pinned_service_widget_controller.dart
+@@ -6,6 +6,7 @@ class PinnedServiceWidgetController extends GetxController {
+     [
+       // 這份清單只存在記憶體，App 重開就回到預設；放在預設清單，demo 時不用每次手動加入
+       MyServiceItemId.voiceAgent,
++      MyServiceItemId.a11y,
+       MyServiceItemId.locationSearch,
+       MyServiceItemId.districtOffice,
+       MyServiceItemId.dashboard,
+diff --git a/lib/service/a11y_share_service.dart b/lib/service/a11y_share_service.dart
+new file mode 100644
+index 0000000..005f1e0
+--- /dev/null
++++ b/lib/service/a11y_share_service.dart
+@@ -0,0 +1,51 @@
++import 'dart:collection';
++
++import 'package:flutter_inappwebview/flutter_inappwebview.dart';
++
++/// 無障礙輔助「讓家人幫忙」：分享開始後，之後打開的每個服務網頁都放入分享程式，
++/// 照顧者就能看到同一個畫面，也能幫忙點按、填寫。
++///
++/// 分享程式（開源的 rrweb 錄製程式＋分享程式）由無障礙輔助的網頁組好後交給 App，
++/// App 只負責保存與放入網頁，所以更新分享程式不需要重新安裝 App。
++/// 程式碼在 TPE_Codefest2026 的 a11y/frontend/js/share-agent.js。
++class A11yShareService {
++  A11yShareService._();
++
++  static final A11yShareService instance = A11yShareService._();
++
++  /// 無障礙輔助網頁的網址。執行時可以指定：
++  /// `fvm flutter run --dart-define=A11Y_URL=https://你的網址/`
++  static const String serviceUrl = String.fromEnvironment(
++    'A11Y_URL',
++    defaultValue: 'https://a11y.invalid/',
++  );
++
++  String? _script;
++
++  bool get active => _script != null;
++
++  /// 只接受無障礙輔助網頁送來的分享程式：其他網頁不能要求 App 把程式放進別的網頁。
++  bool isTrustedOrigin(WebUri? origin) {
++    final Uri allowed = Uri.parse(serviceUrl);
++    if (origin == null || origin.scheme != allowed.scheme || origin.host != allowed.host) {
++      return false;
++    }
++    return !allowed.hasPort || origin.port == allowed.port;
++  }
++
++  void start(String script) => _script = script;
++
++  void stop() => _script = null;
++
++  /// 交給 TPWebView 的 initialUserScripts。沒有在分享時回傳 null，網頁和原本完全一樣。
++  UnmodifiableListView<UserScript>? get userScripts => switch (_script) {
++        String script => UnmodifiableListView<UserScript>([
++            UserScript(
++              source: script,
++              injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
++              forMainFrameOnly: true,
++            ),
++          ]),
++        null => null,
++      };
++}
+diff --git a/lib/util/tp_web_view.dart b/lib/util/tp_web_view.dart
+index f71d113..1c3fd95 100644
+--- a/lib/util/tp_web_view.dart
++++ b/lib/util/tp_web_view.dart
+@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
+ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+ import 'package:get/get.dart';
+ import 'package:town_pass/gen/assets.gen.dart';
++import 'package:town_pass/service/a11y_share_service.dart';
+ import 'package:town_pass/service/task_runner_service.dart';
+ import 'package:town_pass/util/tp_app_bar.dart';
+ import 'package:town_pass/util/tp_colors.dart';
+@@ -88,6 +89,8 @@ class TPWebView extends StatelessWidget {
+       body: TPTaskOverlay(
+         enabled: runsTask,
+         child: TPInAppWebView(
++          // 無障礙輔助分享畫面中：放入分享程式，讓照顧者看到這個網頁（沒有分享時是 null，和原本一樣）
++          initialUserScripts: A11yShareService.instance.userScripts,
+           initialSettings: switch (runsTask) {
+             true => InAppWebViewSettings(isInspectable: !kReleaseMode, useShouldOverrideUrlLoading: true),
+             false => null,
+diff --git a/lib/util/web_message_handler/a11y_share_message_handler.dart b/lib/util/web_message_handler/a11y_share_message_handler.dart
+new file mode 100644
+index 0000000..2993b1c
+--- /dev/null
++++ b/lib/util/web_message_handler/a11y_share_message_handler.dart
+@@ -0,0 +1,45 @@
++import 'package:flutter_inappwebview/flutter_inappwebview.dart';
++import 'package:town_pass/service/a11y_share_service.dart';
++import 'package:town_pass/util/web_message_handler/tp_web_message_handler.dart';
++
++/// 無障礙輔助網頁開始分享畫面：{ name: 'a11y_share_start', data: { script } }
++/// 只接受無障礙輔助網頁（A11yShareService.serviceUrl）送來的訊息，回覆 true／false。
++class A11yShareStartMessageHandler extends TPWebMessageHandler {
++  @override
++  String get name => 'a11y_share_start';
++
++  @override
++  Future<void> handle({
++    required Object? message,
++    required WebUri? sourceOrigin,
++    required bool isMainFrame,
++    required Function(WebMessage replyWebMessage)? onReply,
++  }) async {
++    final A11yShareService service = A11yShareService.instance;
++    final Object? script = message is Map ? message['script'] : null;
++    if (!isMainFrame || !service.isTrustedOrigin(sourceOrigin) || script is! String || script.isEmpty) {
++      onReply?.call(replyWebMessage(data: false));
++      return;
++    }
++    service.start(script);
++    onReply?.call(replyWebMessage(data: true));
++  }
++}
++
++/// 停止分享：{ name: 'a11y_share_stop' }。被照顧者按「停止分享」或分享已結束時，
++/// 分享程式會從服務網頁送出，所以任何網頁都可以要求停止。
++class A11yShareStopMessageHandler extends TPWebMessageHandler {
++  @override
++  String get name => 'a11y_share_stop';
++
++  @override
++  Future<void> handle({
++    required Object? message,
++    required WebUri? sourceOrigin,
++    required bool isMainFrame,
++    required Function(WebMessage replyWebMessage)? onReply,
++  }) async {
++    A11yShareService.instance.stop();
++    onReply?.call(replyWebMessage(data: true));
++  }
++}
+diff --git a/lib/util/web_message_handler/tp_web_message_listener.dart b/lib/util/web_message_handler/tp_web_message_listener.dart
+index 3ccbed9..bc4b9a7 100644
+--- a/lib/util/web_message_handler/tp_web_message_listener.dart
++++ b/lib/util/web_message_handler/tp_web_message_listener.dart
+@@ -1,5 +1,6 @@
+ import 'dart:convert';
+ 
++import 'package:town_pass/util/web_message_handler/a11y_share_message_handler.dart';
+ import 'package:town_pass/util/web_message_handler/llm_message_handler.dart';
+ import 'package:town_pass/util/web_message_handler/task_message_handler.dart';
+ import 'package:town_pass/util/web_message_handler/tp_web_message_handler.dart';
+@@ -25,6 +26,9 @@ abstract class TPWebMessageListener {
+         RunTaskMessageHandler(),
+         LlmStatusMessageHandler(),
+         LlmAskMessageHandler(),
++        // 無障礙輔助：讓家人看畫面、幫忙操作
++        A11yShareStartMessageHandler(),
++        A11yShareStopMessageHandler(),
+       ];
+ 
+   static List<TPWebMessageHandler> get messageHandler => _cachedMessageHandlers;

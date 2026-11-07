@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import actions, auth, care, config, consent, db, faq, faq_sync, ws
+from . import auth, care, config, db, faq, faq_sync, share, ws
 from .errors import ApiError, api_error_handler
 
 log = logging.getLogger("a11y")
@@ -30,8 +30,6 @@ HOUSEKEEPING_JOBS: list[Callable] = [
     auth.expire_idle_logins,      # 閒置太久自動登出（授權跟著結束）
     care.expire_bind_codes,       # 過期的數字碼
     care.expire_pending_links,    # 照顧者輸入數字碼後，被照顧者一直沒回應
-    care.expire_idle_sessions,    # 代操作閒置太久自動結束
-    consent.expire_requests,      # 同意請求逾時視為不同意
 ]
 
 
@@ -91,7 +89,7 @@ async def validation_error_handler(_request, exc: RequestValidationError) -> JSO
     return JSONResponse({"error": "invalid_request", "message": "資料格式不正確", "detail": detail}, status_code=422)
 
 
-for router in (faq.router, auth.router, care.router, consent.router, actions.router, ws.router):
+for router in (faq.router, auth.router, care.router, share.router, ws.router):
     app.include_router(router)
 
 

@@ -1,10 +1,10 @@
-"""功能 B：照顧者代操作——數字碼與 QR code、授權、代操作同步、終止授權（規格第二部分第 5.3、5.4、8.5 節）。
+"""功能 B：讓家人幫忙——數字碼與 QR code、授權、停止分享（規格第二部分第 5.3、5.4、8.5 節）。
 
 流程：
 1. 被照顧者產生 6 位數字碼與 QR code（5 分鐘有效、只能用一次）
-2. 照顧者輸入數字碼或掃描 QR code → 被照顧者手機問「王小美 要幫你操作，同意嗎？」→ 同意後授權生效
-3. 照顧者開始代操作，每做一步送一則事件，後端用固定模板產生提示，推給被照顧者（畫面同步＋朗讀）
-4. 授權在被照顧者「這一次登入」期間有效：終止授權、登出、登入逾時都會立即結束
+2. 照顧者輸入數字碼或掃描 QR code → 被照顧者手機問「王小美 想看你的畫面、幫你操作，同意嗎？」→ 同意後授權生效
+3. 被照顧者開始分享畫面（share.py）：之後在台北通打開的服務網頁，照顧者都看得到，也能遠端點按、填寫
+4. 授權在被照顧者「這一次登入」期間有效：停止分享、登出、登入逾時都會立即結束
 """
 
 import re
@@ -17,7 +17,7 @@ import qrcode.image.svg
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from . import auth, config, consent, store, templates
+from . import auth, config, consent, share, store, templates
 from .errors import ApiError
 from .ws import hub
 
@@ -38,29 +38,15 @@ def _qr_svg(text: str) -> str:
 
 
 def link_view(link: store.CareLink, viewer_id: str) -> dict:
-    """給網頁的授權資料。被照顧者另外看得到進行中的代操作畫面與等待中的同意請求（重新整理時用來還原）。"""
-    view = {
+    """給網頁的授權資料，包含目前的分享狀態（重新整理時用來還原）。"""
+    return {
         "link_id": link.id,
         "status": link.status,
         "elder": auth.user_view(link.elder_id),
         "caregiver": auth.user_view(link.caregiver_id),
         "created_at": store.iso(link.created_at),
-        "session": None,
+        "share": share.share_view(link) if link.status == "active" else None,
     }
-    care_session = open_session(link.id)
-    if care_session:
-        view["session"] = {"session_id": care_session.id, "last_page": care_session.last_page}
-    if viewer_id == link.elder_id:
-        pending = consent.pending_for_link(link.id)
-        view["pending_consent"] = consent.elder_view(pending) if pending else None
-    return view
-
-
-def open_session(link_id: str) -> store.CareSession | None:
-    for care_session in store.state.care_sessions.values():
-        if care_session.link_id == link_id and care_session.ended_at is None:
-            return care_session
-    return None
 
 
 def _link_for(link_id: str, user_id: str, *, as_elder: bool | None = None) -> store.CareLink:
@@ -229,147 +215,32 @@ async def list_links(session: store.LoginSession = Depends(auth.current_session)
 
 @router.delete("/links/{link_id}")
 async def revoke_link(link_id: str, session: store.LoginSession = Depends(auth.current_session)) -> dict:
-    """被照顧者終止授權，立即生效。"""
+    """被照顧者停止分享（終止授權），立即生效。"""
     link = _link_for(link_id, session.user_id, as_elder=True)
     if link.status not in OPEN_LINK:
         raise ApiError(409, "link_closed", "授權已經結束了")
     await close_link(link, "revoked", session.user_id)
-    return {"ok": True, "speak": f"已停止授權，{_name(link.caregiver_id)} 不能再幫你操作。"}
+    return {"ok": True, "speak": f"已停止分享，{_name(link.caregiver_id)} 看不到你的畫面了。"}
 
 
 @router.get("/links/{link_id}/audit")
 async def link_audit(link_id: str, session: store.LoginSession = Depends(auth.current_session)) -> dict:
-    """操作紀錄：誰、什麼時候、做了什麼、怎麼同意的。"""
+    """操作紀錄：誰、什麼時候、做了什麼。"""
     link = _link_for(link_id, session.user_id, as_elder=True)
     entries = [e for e in store.state.audit if e.link_id == link.id]
     return {"entries": [
-        {"at": store.iso(e.created_at), "actor": _name(e.actor_id), "action": e.action, "level": e.level, "method": e.method}
+        {"at": store.iso(e.created_at), "actor": _name(e.actor_id), "action": e.action, "method": e.method}
         for e in entries
     ]}
 
 
-# ---- 3. 代操作與畫面同步 ----
-
-class SessionCreate(BaseModel):
-    link_id: str
-
-
-@router.post("/sessions")
-async def start_session(body: SessionCreate, session: store.LoginSession = Depends(auth.current_session)) -> dict:
-    link = _link_for(body.link_id, session.user_id, as_elder=False)
-    if link.status != "active":
-        raise ApiError(403, "link_closed", "授權已結束")
-
-    previous = open_session(link.id)
-    if previous:
-        _end(previous, "caregiver_end")
-    now = store.now()
-    care_session = store.CareSession(id=str(uuid.uuid4()), link_id=link.id, started_at=now, last_event_at=now)
-    store.state.care_sessions[care_session.id] = care_session
-    store.audit(link.id, session.user_id, "session_started")
-
-    await hub.send(link.elder_id, "session_started", {
-        "session_id": care_session.id,
-        "link_id": link.id,
-        "caregiver_name": _name(link.caregiver_id),
-        "speak": templates.session_started(_name(link.caregiver_id)),
-    })
-    return {"session_id": care_session.id, "link_id": link.id, "elder": auth.user_view(link.elder_id)}
-
-
-class PageFields(BaseModel):
-    # 照顧者正在填的欄位。格式先檢查過才推給被照顧者，避免把奇怪的文字念給長輩聽
-    plate: str | None = Field(default=None, pattern=r"^[A-Z0-9-]{0,10}$")
-    amount: int | None = Field(default=None, ge=0, le=100000)
-
-
-class PageEvent(BaseModel):
-    action_type: str
-    step: int
-    fields: PageFields = PageFields()
-
-
-def _session_for_caregiver(session_id: str, user_id: str) -> tuple[store.CareSession, store.CareLink]:
-    care_session = store.state.care_sessions.get(session_id)
-    link = store.state.links.get(care_session.link_id) if care_session else None
-    if not care_session or not link or link.caregiver_id != user_id:
-        raise ApiError(404, "session_not_found", "找不到這次代操作")
-    if care_session.ended_at is not None or link.status != "active":
-        raise ApiError(403, "session_ended", "代操作已經結束了")
-    return care_session, link
-
-
-@router.post("/sessions/{session_id}/events")
-async def page_event(session_id: str, body: PageEvent, session: store.LoginSession = Depends(auth.current_session)) -> dict:
-    """照顧者每做一步（或欄位有變動）送一次。換到新步驟時才朗讀，打字時只更新畫面。"""
-    care_session, link = _session_for_caregiver(session_id, session.user_id)
-    steps = templates.STEPS.get(body.action_type)
-    if not steps or body.step not in steps:
-        raise ApiError(400, "unknown_step", "不支援這個步驟")
-
-    fields = body.fields.model_dump(exclude_none=True)
-    new_step = body.step != care_session.last_step
-    page = {
-        "action_type": body.action_type,
-        "step": body.step,
-        "step_name": steps[body.step],
-        "total_steps": len(steps),
-        "fields": fields,
-        "speak": templates.step_speak(_name(link.caregiver_id), body.action_type, body.step, fields) if new_step else None,
-    }
-    care_session.last_step = body.step
-    care_session.last_page = page
-    care_session.last_event_at = store.now()
-    if new_step:
-        store.audit(link.id, session.user_id, f"step:{body.action_type}:{body.step}")
-
-    await hub.send(link.elder_id, "page_sync", {"session_id": care_session.id, **page})
-    return {"ok": True}
-
-
-@router.post("/sessions/{session_id}/end")
-async def end_session(session_id: str, session: store.LoginSession = Depends(auth.current_session)) -> dict:
-    """照顧者按「結束代操作」，或被照顧者說「我自己來」（授權本身仍然有效）。"""
-    care_session = store.state.care_sessions.get(session_id)
-    link = store.state.links.get(care_session.link_id) if care_session else None
-    if not care_session or not link or session.user_id not in (link.elder_id, link.caregiver_id):
-        raise ApiError(404, "session_not_found", "找不到這次代操作")
-    if care_session.ended_at is not None:
-        return {"ok": True}
-    reason = "elder_takeover" if session.user_id == link.elder_id else "caregiver_end"
-    await _end_and_notify(care_session, link, reason)
-    return {"ok": True}
-
-
-def _end(care_session: store.CareSession, reason: str) -> None:
-    care_session.ended_at = store.now()
-    care_session.end_reason = reason
-
-
-async def _end_and_notify(care_session: store.CareSession, link: store.CareLink, reason: str) -> None:
-    _end(care_session, reason)
-    store.audit(link.id, link.elder_id if reason == "elder_takeover" else link.caregiver_id, f"session_ended:{reason}")
-    for user_id, other, for_elder in ((link.elder_id, link.caregiver_id, True), (link.caregiver_id, link.elder_id, False)):
-        await hub.send(user_id, "session_ended", {
-            "session_id": care_session.id,
-            "reason": reason,
-            "speak": templates.session_ended(_name(other), reason, for_elder=for_elder),
-        })
-
-
-# ---- 4. 結束授權 ----
-
-SESSION_END_REASON = {"revoked": "revoked", "ended": "elder_logout", "expired": "login_expired"}
-
+# ---- 3. 結束授權 ----
 
 async def close_link(link: store.CareLink, status: str, actor_id: str) -> None:
     """終止授權、登出、登入逾時都走這裡（規格第二部分第 8.5 節）。"""
     link.status = status
     link.closed_at = store.now()
-    care_session = open_session(link.id)
-    if care_session:
-        _end(care_session, SESSION_END_REASON.get(status, status))
-    await consent.cancel_for_link(link.id)  # 取消等待中的同意、作廢沒用過的 token
+    await share.close_share(link)  # 被照顧者手機上的分享程式立即停止
     store.audit(link.id, actor_id, f"link_closed:{status}")
 
     data = {"link_id": link.id, "reason": status, "speak": templates.link_closed(_name(link.elder_id), status)}
@@ -403,10 +274,3 @@ async def expire_pending_links() -> None:
                 "speak": templates.link_closed(_name(link.elder_id), "confirm_expired"),
             })
             await hub.send(link.elder_id, "link_closed", {"link_id": link.id, "reason": "confirm_expired", "speak": None})
-
-
-async def expire_idle_sessions() -> None:
-    limit = store.now() - timedelta(minutes=config.CARE_SESSION_IDLE_MINUTES)
-    for care_session in list(store.state.care_sessions.values()):
-        if care_session.ended_at is None and care_session.last_event_at < limit:
-            await _end_and_notify(care_session, store.state.links[care_session.link_id], "idle_timeout")

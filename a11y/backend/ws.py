@@ -1,9 +1,10 @@
 """WebSocket：後端主動推送事件給手機（規格第二部分第 6 節）。
 
-兩支手機打開頁面時各自連上 /ws?token=<登入 token>，連線一直開著。
-照顧者每做一步，後端就推一則很小的事件給被照顧者，例如
-    { "type": "page_sync", "data": { "step": 2, "fields": { "plate": "ABC-12" }, "speak": "王小美 正在幫你填寫車牌。" } }
-傳的是「狀態」不是「畫面影像」，所以手機和網路的負擔都很小。
+兩支手機打開無障礙輔助的頁面時各自連上 /ws?token=<登入 token>，連線一直開著。
+後端用它通知「家人輸入了數字碼」「對方已同意」「分享已結束」，
+以及把被照顧者的畫面變化（share_events）轉送給照顧者，例如
+    { "type": "link_activated", "data": { "link_id": "…", "speak": "王阿伯 已同意，可以看他的畫面了。" } }
+被照顧者服務網頁裡的分享程式另外連 /ws/share（見 share.py）。
 """
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
