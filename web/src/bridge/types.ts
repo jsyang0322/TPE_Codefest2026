@@ -26,7 +26,8 @@ export interface RequestOptions {
 export interface TaskScript {
   id: string;
   description: string;
-  slots: Record<string, { ask: string; options?: string[]; pattern?: string }>;
+  /** label：放進 LLM prompt 的欄位說明（沒有 options 時用） */
+  slots: Record<string, { ask: string; label?: string; options?: string[]; pattern?: string }>;
   steps: TaskStep[];
 }
 
