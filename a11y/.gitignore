@@ -1,0 +1,7 @@
+# SQLite 資料庫（執行時產生）
+*.db
+*.db-wal
+*.db-shm
+
+# 本機 HTTPS 憑證（手機實測用，不 commit）
+certs/

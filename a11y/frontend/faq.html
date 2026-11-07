@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>常見問題</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/faq.css">
+</head>
+<body>
+  <main class="page faq">
+    <h1 id="page-title" tabindex="-1">常見問題</h1>
+    <p id="heard" class="heard" hidden>我聽到：<strong id="heard-text"></strong></p>
+    <p id="offline-note" class="note" hidden></p>
+
+    <section id="view-loading">
+      <p class="muted">載入中…</p>
+    </section>
+
+    <section id="view-error" hidden aria-labelledby="error-title">
+      <h2 id="error-title" tabindex="-1">無法顯示常見問題</h2>
+      <p id="error-message"></p>
+      <button class="btn btn-primary" type="button" data-action="reload">重新載入</button>
+    </section>
+
+    <!-- 首頁：打字問、大家常問 -->
+    <section id="view-home" hidden aria-labelledby="home-title">
+      <h2 id="home-title" class="visually-hidden">問問題</h2>
+      <form id="ask-form" class="ask-form">
+        <label for="ask-input">用打字問</label>
+        <div class="ask-row">
+          <input id="ask-input" type="text" enterkeyhint="search" autocomplete="off" placeholder="例如：忘記密碼">
+          <button class="btn btn-primary" type="submit">查詢</button>
+        </div>
+      </form>
+      <h2 id="popular-title">大家常問</h2>
+      <div id="popular-list" class="choice-list" role="list" aria-labelledby="popular-title"></div>
+      <button class="btn btn-secondary" type="button" data-action="all">看全部問題</button>
+    </section>
+
+    <!-- 候選問題 -->
+    <section id="view-results" hidden aria-labelledby="results-title">
+      <h2 id="results-title" tabindex="-1">你是想問這些嗎？</h2>
+      <div id="results-list" class="choice-list" role="list" aria-labelledby="results-title"></div>
+      <h3>都不是</h3>
+      <button class="btn btn-secondary" type="button" data-action="again">換個說法再問一次</button>
+      <button class="btn btn-secondary" type="button" data-action="all">看全部問題</button>
+      <button class="btn btn-secondary" type="button" data-action="call">撥打 1999 由專人協助</button>
+    </section>
+
+    <!-- 找不到 -->
+    <section id="view-notfound" hidden aria-labelledby="notfound-title">
+      <h2 id="notfound-title" tabindex="-1">找不到相關的問題</h2>
+      <button class="btn btn-primary" type="button" data-action="again">換個說法再問一次</button>
+      <button class="btn btn-secondary" type="button" data-action="all">看全部問題</button>
+      <button class="btn btn-secondary" type="button" data-action="call">撥打 1999 由專人協助</button>
+      <button class="btn btn-secondary" type="button" data-action="home">回到首頁</button>
+    </section>
+
+    <!-- 答案 -->
+    <section id="view-answer" hidden aria-labelledby="answer-question">
+      <p id="answer-category" class="muted"></p>
+      <h2 id="answer-question" tabindex="-1"></h2>
+      <ol id="answer-segments" class="segments"></ol>
+      <div class="btn-row">
+        <button class="btn btn-primary" type="button" data-action="repeat">再唸一次</button>
+        <button id="btn-next" class="btn btn-primary" type="button" data-action="next">下一段</button>
+      </div>
+      <button id="btn-back-results" class="btn btn-secondary" type="button" data-action="back">回到問題</button>
+      <button class="btn btn-secondary" type="button" data-action="home">問別的問題</button>
+    </section>
+
+    <!-- 全部問題 -->
+    <section id="view-all" hidden aria-labelledby="all-title">
+      <h2 id="all-title" tabindex="-1">全部問題</h2>
+      <div id="all-list"></div>
+      <button class="btn btn-secondary" type="button" data-action="home">回到首頁</button>
+    </section>
+
+    <footer class="faq-footer">
+      <label class="toggle">
+        <input id="sr-toggle" type="checkbox">
+        <span>我使用螢幕閱讀器（VoiceOver、TalkBack）</span>
+      </label>
+      <p id="source" class="source"></p>
+    </footer>
+  </main>
+
+  <!-- 螢幕下半部整塊是說話按鈕（規格第一部分第 3.3 節） -->
+  <div class="talk-area">
+    <!-- 電腦開發用：沒有台北通 App 時用打字代替說話，不使用雲端語音辨識 -->
+    <form id="mock-mic" class="mock-mic" hidden>
+      <label for="mock-input">（電腦測試）用打字代替說話</label>
+      <div class="ask-row">
+        <input id="mock-input" type="text" autocomplete="off">
+        <button class="btn btn-primary" type="submit">說完了</button>
+        <button id="mock-cancel" class="btn btn-secondary" type="button">不說了</button>
+      </div>
+    </form>
+    <button id="btn-talk" class="talk-btn" type="button" disabled>
+      <svg class="talk-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2z" fill="currentColor"/>
+      </svg>
+      <span id="talk-label">按這裡，用講的問</span>
+      <span id="talk-partial" class="talk-partial"></span>
+    </button>
+  </div>
+
+  <div id="announce-polite" class="visually-hidden" aria-live="polite"></div>
+  <div id="announce-assertive" class="visually-hidden" aria-live="assertive"></div>
+
+  <script type="module" src="js/faq-page.js"></script>
+</body>
+</html>

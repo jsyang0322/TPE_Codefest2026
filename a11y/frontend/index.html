@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>台北通無障礙輔助</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/base.css">
+</head>
+<body>
+  <main class="page">
+    <h1 id="page-title" tabindex="-1">台北通無障礙輔助</h1>
+    <p class="muted">常見問題語音查詢・照顧者代操作</p>
+
+    <a class="btn btn-primary" href="faq.html">常見問題：用講的問、用聽的聽答案</a>
+
+    <section class="card" aria-labelledby="care-title">
+      <h2 id="care-title">讓家人幫忙（demo：選擇登入身分）</h2>
+      <p class="muted">台北通正式的登入不對外開放，demo 用兩個模擬帳號。用兩支手機，或同一台電腦開兩個分頁。</p>
+      <p id="logged-in" class="muted" hidden></p>
+      <button class="btn btn-primary" type="button" data-login="elder-1" data-page="elder.html">以王阿伯登入（被照顧者）</button>
+      <button class="btn btn-secondary" type="button" data-login="caregiver-1" data-page="caregiver.html">以王小美登入（照顧者）</button>
+      <p id="login-error" class="bad" role="alert"></p>
+    </section>
+
+    <section class="card" aria-labelledby="status-title">
+      <h2 id="status-title">連線狀態</h2>
+      <dl class="status">
+        <dt>後端</dt>
+        <dd id="status-backend">檢查中…</dd>
+        <dt>台北通 App</dt>
+        <dd id="status-app">檢查中…</dd>
+      </dl>
+    </section>
+  </main>
+
+  <div id="announce-polite" class="visually-hidden" aria-live="polite"></div>
+  <div id="announce-assertive" class="visually-hidden" aria-live="assertive"></div>
+
+  <script type="module" src="js/index-page.js"></script>
+</body>
+</html>

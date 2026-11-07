@@ -1,0 +1,73 @@
+/* 常見問題頁。共用的色票、按鈕在 base.css */
+
+/* 下半部是固定的說話區（base.css），內容要留出空間才不會被蓋住 */
+.faq {
+  padding-bottom: calc(var(--talk-height) + 1.5rem);
+}
+
+.heard {
+  background: var(--primary-50);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  font-size: 1.111rem;
+}
+
+.note {
+  background: var(--red-50);
+  color: var(--red-600);
+  border-radius: var(--radius);
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+}
+
+h3 { font-size: 1.111rem; margin: 1.5rem 0 0.5rem; }
+
+/* 打字問 */
+.ask-form { margin-bottom: 1.5rem; }
+.ask-form label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+
+/* 問題選項：大按鈕、文字靠左 */
+.choice-list { display: grid; gap: 0.75rem; margin-bottom: 1rem; }
+.choice {
+  justify-content: flex-start;
+  text-align: left;
+  line-height: 1.5;
+  padding: 0.75rem 1rem;
+}
+.choice-list .btn + .btn { margin-top: 0; }
+
+/* 答案：一段一段，正在念的那段加框 */
+.segments {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+.segments li {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-size: 1.222rem; /* 22px */
+  line-height: 1.7;
+  background: var(--white);
+  border: 3px solid transparent;
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+.segments li.current { border-color: var(--secondary-500); }
+/* 捲到正在念的段落時，不要停在說話區後面 */
+.segments li { scroll-margin-bottom: calc(var(--talk-height) + 1rem); }
+.segments a { color: var(--primary-700); }
+
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
+.btn-row .btn + .btn { margin-top: 0; }
+
+/* 全部問題 */
+.category + .category { margin-top: 1rem; }
+
+/* 頁尾 */
+.faq-footer { margin-top: 2rem; }
+.toggle { display: flex; align-items: center; gap: 0.75rem; min-height: 48px; font-weight: 600; cursor: pointer; }
+.toggle input { width: 28px; height: 28px; flex: none; accent-color: var(--primary-700); }
+.source { font-size: 0.889rem; color: var(--gray-600); }
+.source a { color: var(--primary-700); }

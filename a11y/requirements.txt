@@ -1,0 +1,4 @@
+# 執行需要的套件（皆為開源免費）
+fastapi==0.162.0            # MIT
+uvicorn[standard]==0.54.0   # BSD-3-Clause；[standard] 內含 WebSocket 支援
+qrcode==8.2                 # BSD；後端產生 QR code 的 SVG，不需要圖片套件

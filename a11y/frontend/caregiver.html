@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>幫家人操作</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/care.css">
+</head>
+<body class="care-caregiver">
+  <main id="main" class="page care">
+    <header class="care-header">
+      <h1 id="page-title" tabindex="-1">幫家人操作</h1>
+      <p class="muted">登入身分：<span id="me"></span><button class="link-btn" type="button" data-action="logout">登出</button></p>
+      <p id="conn" class="note" hidden>連線中斷，正在重新連線…</p>
+    </header>
+
+    <!-- 訊息（同時是 live region，螢幕閱讀器會念） -->
+    <p id="status" class="status-box" role="status"></p>
+
+    <section id="view-home" aria-labelledby="page-title">
+      <form id="code-form" class="code-form">
+        <label for="code-input">輸入家人手機上的 6 位數字</label>
+        <div class="ask-row">
+          <input id="code-input" type="text" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="off" placeholder="例如 482715">
+          <button class="btn btn-primary" type="submit">送出</button>
+        </div>
+      </form>
+      <button id="btn-scan" class="btn btn-secondary" type="button" data-action="scan" hidden>用台北通掃描 QR code</button>
+
+      <h2>我協助的人</h2>
+      <p id="links-empty" class="muted">目前沒有。</p>
+      <ul id="links-list" class="link-list"></ul>
+    </section>
+
+    <section id="view-proxy" hidden aria-labelledby="proxy-title">
+      <h2 id="proxy-title" tabindex="-1"></h2>
+      <p class="muted">你每做一步，對方的手機都會同步顯示並念出來。付款前會先請對方同意。</p>
+      <div id="proxy-form" class="card"></div>
+      <div id="consent-wait" class="wait" hidden>
+        <p id="consent-wait-text"></p>
+        <p id="consent-wait-countdown" class="muted"></p>
+      </div>
+      <p id="proxy-result" class="result" hidden></p>
+      <details class="demo-tools">
+        <summary>Demo 工具</summary>
+        <label class="toggle">
+          <input id="tamper" type="checkbox">
+          <span>付款時偷偷把金額改成 1200 元（示範：伺服器會擋下竄改）</span>
+        </label>
+      </details>
+      <button class="btn btn-secondary" type="button" data-action="end">結束代操作</button>
+    </section>
+  </main>
+
+  <div id="announce-polite" class="visually-hidden" aria-live="polite"></div>
+  <div id="announce-assertive" class="visually-hidden" aria-live="assertive"></div>
+
+  <script type="module" src="js/caregiver-page.js"></script>
+</body>
+</html>

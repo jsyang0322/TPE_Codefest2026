@@ -1,0 +1,10 @@
+{
+  "name": "taipeipass-a11y",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "description": "台北通無障礙輔助：常見問題語音查詢、照顧者代操作。前端是純 HTML/JS，沒有套件、不需要建置；這個檔案只用來跑 node --test。",
+  "scripts": {
+    "test": "node --test \"tests/js/*.test.js\""
+  }
+}

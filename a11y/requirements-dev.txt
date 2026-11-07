@@ -1,0 +1,4 @@
+# 只在開發與測試時使用，不需要部署
+-r requirements.txt
+pytest==9.2.0   # MIT
+httpx==0.28.1   # BSD-3-Clause；FastAPI TestClient 需要
