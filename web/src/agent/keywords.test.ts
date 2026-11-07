@@ -80,6 +80,12 @@ test('不問 LLM 的判斷：實機測試句', () => {
   assert.deepEqual(route('今天天氣好嗎'), question);
   assert.equal(route('嗯…那個…'), null);
   assert.deepEqual(route('停車費'), task('parking_fee'));
+  // 離線問答實測補強：這幾句要進問答，不能流到 LLM 或腳本
+  assert.deepEqual(route('書可以借幾本'), question);
+  assert.deepEqual(route('書可以借多久'), question);
+  assert.deepEqual(route('逾期會怎樣'), question);
+  // 裸「幾」不收：叫到幾號是叫號腳本
+  assert.deepEqual(route('區公所現在叫到幾號'), task('counter_calling'));
 });
 
 test('不問 LLM 的判斷：問句裡要辦事、要辦事的說法裡在問', () => {
