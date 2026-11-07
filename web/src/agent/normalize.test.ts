@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractKeyword, matchOption, normalizePlate, normalizeSlot } from './normalize.ts';
+import { extractKeyword, findPlate, matchOption, normalizePlate, normalizeSlot, slotsFromText } from './normalize.ts';
 import type { TaskScript } from '../bridge/types.ts';
+import { readFileSync } from 'node:fs';
+
+const loadScript = (name: string): TaskScript =>
+  JSON.parse(readFileSync(new URL(`./scripts/${name}.json`, import.meta.url), 'utf8'));
 
 test('車號：各種唸法', () => {
   const cases: [string, string][] = [
@@ -88,4 +92,32 @@ test('選項：繳費方式的說法', () => {
   assert.equal(matchOption(methods, '用悠遊卡'), '悠遊付');
   assert.equal(matchOption(methods, '刷信用卡'), '台北富邦信用卡');
   assert.equal(matchOption(methods, '智慧支付'), '智慧支付平台');
+});
+
+test('從整句話找車號', () => {
+  const pattern = loadScript('parking_fee').slots.plate.pattern;
+  assert.equal(findPlate('幫我查停車費，車號 ABC 123', pattern), 'ABC-123');
+  assert.equal(findPlate('我要查 ABC 一二三 機車的停車費', pattern), 'ABC-123');
+  assert.equal(findPlate('A B C 杠 一 二 三 那台汽車的停車費', pattern), 'ABC-123');
+  assert.equal(findPlate('查一下 ABC1234 的停車費', pattern), 'ABC-1234');
+  assert.equal(findPlate('車號是 ７７８８－ＥＸ', pattern), '7788-EX');
+  // 沒說車號、只有數字或只有字母：不亂填
+  assert.equal(findPlate('幫我查停車費', pattern), null);
+  assert.equal(findPlate('我有兩台車', pattern), null);
+  assert.equal(findPlate('查一下停車費', pattern), null);
+});
+
+test('不用 LLM 抽出腳本的資料', () => {
+  assert.deepEqual(slotsFromText(loadScript('parking_fee'), '幫我查停車費，車號 ABC 123'), { plate: 'ABC-123' });
+  assert.deepEqual(slotsFromText(loadScript('parking_fee'), '我要查 ABC 一二三 機車的停車費'), {
+    vehicle: '機車',
+    plate: 'ABC-123',
+  });
+  assert.deepEqual(slotsFromText(loadScript('parking_fee'), '我的摩托車停車費還沒繳'), { vehicle: '機車' });
+  assert.deepEqual(slotsFromText(loadScript('library_search'), '圖書館有沒有東野圭吾的書'), { keyword: '東野圭吾' });
+  assert.deepEqual(slotsFromText(loadScript('library_search'), '我想借哈利波特'), { keyword: '哈利波特' });
+  // 抽不乾淨就不填，之後再問
+  assert.deepEqual(slotsFromText(loadScript('library_search'), '我要找書'), {});
+  assert.deepEqual(slotsFromText(loadScript('library_search'), '幫我在圖書館查書'), {});
+  assert.deepEqual(slotsFromText(loadScript('counter_calling'), '區公所現在叫到幾號'), { office: '區公所' });
 });

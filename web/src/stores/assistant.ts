@@ -83,6 +83,11 @@ const restored = load();
 let choiceResolve: ((text: string) => void) | null = null;
 /** 題目還在念的時候就按了按鈕：先存著，listen() 一開始就直接拿走 */
 let pendingChoice: string | null = null;
+/** 這一輪已經念過「好的，我想一下」：理解完接著問答時不再念一次 */
+let hintSpoken = false;
+
+/** 思考超過這麼久就先念一句，讓使用者知道助手有在做事 */
+const THINKING_HINT_MS = 2000;
 
 export const useAssistant = defineStore('assistant', {
   state: () => ({
@@ -109,6 +114,8 @@ export const useAssistant = defineStore('assistant', {
     cancelled: false,
     /** 目前題目可以直接點的答案；空陣列表示不顯示按鈕 */
     choices: [] as string[],
+    /** 這次思考已經等了幾秒，畫面上顯示；不在思考時是 0 */
+    thinkingSeconds: 0,
   }),
 
   getters: {
@@ -252,16 +259,17 @@ export const useAssistant = defineStore('assistant', {
       }
       if (!text) return this.say('我沒有聽到，請再按一次按鈕說話。');
 
-      this.phase = 'thinking';
-      const intent = await understand(text);
+      hintSpoken = false;
+      const intent = await this.think(understand(text));
       if (this.cancelled) return; // 思考中按了停止
 
       if (intent.kind === 'question') {
         this.misses = 0;
-        this.phase = 'thinking';
-        const reply = await answer(intent.question, (partial) => {
-          if (!this.cancelled) this.caption = partial;
-        });
+        const reply = await this.think(
+          answer(intent.question, (partial) => {
+            if (!this.cancelled) this.caption = partial;
+          }),
+        );
         return this.say(reply);
       }
       if (intent.kind === 'unknown') {
@@ -273,6 +281,30 @@ export const useAssistant = defineStore('assistant', {
 
       this.misses = 0;
       await this.runScript(intent.script, intent.slots);
+    },
+
+    /**
+     * 等 LLM 的期間：顯示「思考中」和已經等了幾秒；超過 2 秒先念「好的，我想一下」。
+     * 用關鍵字就判斷出來的句子不會等到 2 秒，所以不會念。
+     */
+    async think<T>(work: Promise<T>): Promise<T> {
+      this.phase = 'thinking';
+      this.thinkingSeconds = 0;
+      const started = Date.now();
+      const tick = setInterval(() => (this.thinkingSeconds = Math.floor((Date.now() - started) / 1000)), 1000);
+      const hint = setTimeout(() => {
+        if (this.phase !== 'thinking' || this.cancelled || hintSpoken) return;
+        hintSpoken = true;
+        // 不用 say()：它會把 phase 改成 speaking；這句也不放進對話紀錄
+        bridge.speak('好的，我想一下。').catch(() => {});
+      }, THINKING_HINT_MS);
+      try {
+        return await work;
+      } finally {
+        clearInterval(tick);
+        clearTimeout(hint);
+        this.thinkingSeconds = 0;
+      }
     },
 
     /** 開服務頁需要網路；沒有網路時說明並回傳 false。要在問使用者任何問題之前檢查 */

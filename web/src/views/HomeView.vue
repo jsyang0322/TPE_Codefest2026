@@ -17,9 +17,14 @@ const busy = computed(() => assistant.phase !== 'idle');
 const micLabel = computed(() => (busy.value ? '停止' : '按這裡說話'));
 
 /** 有選項按鈕時，狀態列提醒也可以用按的 */
-const statusText = computed(() =>
-  assistant.choices.length && assistant.phase === 'listening' ? '聆聽中，請說話或按下方按鈕' : phaseLabel[assistant.phase],
-);
+const statusText = computed(() => {
+  if (assistant.choices.length && assistant.phase === 'listening') return '聆聽中，請說話或按下方按鈕';
+  // 等 LLM 時顯示已經等了幾秒，使用者知道助手沒有當掉
+  if (assistant.phase === 'thinking' && assistant.thinkingSeconds >= 2) {
+    return `${phaseLabel.thinking}（${assistant.thinkingSeconds} 秒）`;
+  }
+  return phaseLabel[assistant.phase];
+});
 </script>
 
 <template>

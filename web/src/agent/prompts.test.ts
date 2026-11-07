@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fallbackAnswer, faqPrompt, taskPrompt } from './prompts.ts';
+import { fallbackAnswer, faqPrompt, pickFaqs, taskPrompt } from './prompts.ts';
 import type { TaskScript } from '../bridge/types.ts';
 
 const parking: TaskScript = {
@@ -44,4 +44,20 @@ test('任務 B 失敗時的說明', () => {
   assert.match(fallbackAnswer('busy'), /稍等/);
   assert.match(fallbackAnswer('timeout'), /1999/);
   assert.match(fallbackAnswer(), /1999/);
+});
+
+test('任務 B 只放相關的 FAQ', () => {
+  const faq = (source: string) => ({ source, items: [{ q: 'q', a: 'a' }] });
+  const faqs = {
+    parking_fee: faq('停管處'),
+    library: faq('圖書館'),
+    household_registration: faq('民政局'),
+    townpass: faq('台北通'),
+  };
+  const sources = (question: string) => pickFaqs(faqs, question).map((f) => f.source);
+  assert.deepEqual(sources('停車費可以去超商繳嗎'), ['停管處', '台北通']);
+  assert.deepEqual(sources('圖書館幾點關門'), ['圖書館', '台北通']);
+  assert.deepEqual(sources('戶政事務所要排隊多久'), ['民政局', '台北通']);
+  // 對不到就全部放
+  assert.deepEqual(sources('敬老卡要怎麼申請'), ['停管處', '圖書館', '民政局', '台北通']);
 });
