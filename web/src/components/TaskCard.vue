@@ -4,7 +4,7 @@ import type { TaskProgress } from '../stores/assistant';
 defineProps<{ task: TaskProgress }>();
 
 const statusText: Record<TaskProgress['status'], string> = {
-  running: 'AI 操作中',
+  running: '操作中',
   done: '完成',
   failed: '這一步沒有成功，您可以自己接著操作',
   stopped: '已停止',

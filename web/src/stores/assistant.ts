@@ -38,7 +38,7 @@ export const phaseLabel: Record<Phase, string> = {
   listening: '聆聽中，請說話',
   thinking: '思考中，請稍等',
   speaking: '說話中',
-  running: 'AI 操作中',
+  running: '操作中',
 };
 
 // ---- 保存對話狀態 ----
