@@ -68,8 +68,8 @@ function faqItemText(item: Record<string, unknown>): string {
  * 只放相關的資料，等待時間就短很多。沒列在這裡的檔案（townpass：台北通、1999）每次都放。
  */
 const FAQ_TOPICS: Record<string, RegExp> = {
-  parking_fee: /停車|車位|拖吊|罰單/,
-  library: /圖書館|書|借|館藏|閱覽/,
+  parking_fee: /停車|車位|拖吊|罰單|逾期|罰/,
+  library: /圖書館|書|借|館藏|閱覽|逾期|罰/,
   household_registration: /戶政|戶籍|戶口|身分證|等候|叫號|排隊|號碼牌/,
 };
 
