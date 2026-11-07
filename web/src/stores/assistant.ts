@@ -4,7 +4,7 @@
 import { defineStore } from 'pinia';
 import { bridge } from '../bridge';
 import type { TaskScript } from '../bridge/types';
-import { answer, normalizeSlot, understand } from '../agent';
+import { answer, describeResult, matchCommand, normalizeSlot, understand } from '../agent';
 
 export type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'running';
 
@@ -115,6 +115,10 @@ export const useAssistant = defineStore('assistant', {
         while (!slots[key] && tries < 2) {
           await this.say(spec.ask);
           const reply = await this.listen();
+          // 「停止」「再說一次」要先判斷，不能當成欄位的值
+          const command = reply ? matchCommand(reply) : null;
+          if (command === 'stop') return this.say('好的，已經取消。');
+          if (command === 'repeat') continue; // 回到迴圈開頭重念 spec.ask，不算一次嘗試
           const value = reply ? normalizeSlot(script, key, reply) : null;
           if (value) slots[key] = value;
           tries += 1;
@@ -131,8 +135,9 @@ export const useAssistant = defineStore('assistant', {
         });
         const result = (reply.result ?? {}) as Record<string, unknown>;
         this.task.status = 'done';
-        this.task.result = Object.values(result).map(String).join('\n');
+        this.task.result = describeResult(script.id, result);
         this.phase = 'idle';
+        if (this.task.result) await this.say(this.task.result);
       } catch (error) {
         const code = (error as { code?: string }).code;
         this.task.status = code === 'stopped' ? 'stopped' : 'failed';
