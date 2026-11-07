@@ -391,6 +391,9 @@ def test_app_screen_reaches_caregiver(client, people):
         command = next_of(app, "command")
         assert command["action"] == "tap" and command["x"] == 120.5 and command["y"] == 300
 
+        assert client.post(f"/api/share/{link_id}/commands", json={"action": "home"}, headers=people["care"]).status_code == 200
+        assert next_of(app, "command")["action"] == "home"
+
         body = {"action": "type", "value": "王大明"}
         assert client.post(f"/api/share/{link_id}/commands", json=body, headers=people["care"]).status_code == 200
         assert next_of(app, "command")["value"] == "王大明"

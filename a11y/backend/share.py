@@ -106,8 +106,9 @@ class Command(BaseModel):
     - 台北通 App：tap（點畫面上的位置 x, y）、type（填入長輩手機上選取的欄位）
     - 模擬服務頁：click、input（node_id 是 rrweb 的元素編號）
     - 兩種都可以：scroll（dy 往下捲多少）、back（上一頁）
+    - 台北通 App：home（回到台北通首頁）
     """
-    action: Literal["tap", "type", "click", "input", "scroll", "back"]
+    action: Literal["tap", "type", "click", "input", "scroll", "back", "home"]
     node_id: int | None = Field(default=None, ge=1)
     x: float | None = Field(default=None, ge=0, le=10000)
     y: float | None = Field(default=None, ge=0, le=10000)

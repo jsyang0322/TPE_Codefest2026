@@ -69,10 +69,10 @@ index 19724fa..66ba56a 100644
        MyServiceItemId.dashboard,
 diff --git a/lib/service/a11y_share_service.dart b/lib/service/a11y_share_service.dart
 new file mode 100644
-index 0000000..504da28
+index 0000000..ba9c168
 --- /dev/null
 +++ b/lib/service/a11y_share_service.dart
-@@ -0,0 +1,891 @@
+@@ -0,0 +1,951 @@
 +import 'dart:async';
 +import 'dart:convert';
 +import 'dart:io';
@@ -263,6 +263,43 @@ index 0000000..504da28
 +  /// 畫面上看得到的網頁：在網頁中間點一下（只是檢查，不會真的按）會點到它，才算看得到
 +  /// （被別的頁面蓋住、在背景的分頁都點不到）。
 +  List<_VisibleWebView> _visibleWebViews(RenderRepaintBoundary boundary) {
++    final List<_VisibleWebView> candidates = _webViewCandidates(boundary);
++    final List<_VisibleWebView> result = [
++      for (final _VisibleWebView web in candidates)
++        if (_hitPath(boundary, web.rect.center).contains(web.box)) web,
++    ];
++    if (result.isEmpty) {
++      // 備案：中間點到的是原生畫的畫面（網頁），就當作最後打開的那個網頁
++      for (final _VisibleWebView web in candidates.reversed) {
++        if (_hitPath(boundary, web.rect.center).any(_isPlatformView)) {
++          return [web];
++        }
++      }
++    }
++    return result;
++  }
++
++  /// 畫面上那個位置的網頁。網頁是 iOS／Android 原生畫的，App 模擬的手指點不到它，
++  /// 所以位置在網頁上，就一定要用 JavaScript 按。
++  _VisibleWebView? _webViewAt(RenderRepaintBoundary boundary, Offset point) {
++    final List<HitTestTarget> path = _hitPath(boundary, point);
++    final List<_VisibleWebView> candidates = [
++      for (final _VisibleWebView web in _webViewCandidates(boundary))
++        if (web.rect.contains(point)) web,
++    ];
++    for (final _VisibleWebView web in candidates.reversed) {
++      if (path.contains(web.box)) {
++        return web;
++      }
++    }
++    if (candidates.isNotEmpty && path.any(_isPlatformView)) {
++      return candidates.last; // 後打開的網頁在上面
++    }
++    return null;
++  }
++
++  /// 登記過、還在畫面上的網頁與它的位置（還沒檢查有沒有被蓋住）。後打開的排在後面。
++  List<_VisibleWebView> _webViewCandidates(RenderRepaintBoundary boundary) {
 +    _webViews.removeWhere((entry) => !entry.context.mounted);
 +    final Rect screen = Offset.zero & boundary.size;
 +    final List<_VisibleWebView> result = [];
@@ -275,22 +312,13 @@ index 0000000..504da28
 +      if (rect.isEmpty || rect.width < 1 || rect.height < 1) {
 +        continue;
 +      }
-+      if (_hitPath(boundary, rect.center).contains(box)) {
-+        result.add(_VisibleWebView(entry.controller, box, rect));
-+      }
++      result.add(_VisibleWebView(entry.controller, box, rect));
 +    }
 +    return result;
 +  }
 +
-+  _VisibleWebView? _webViewAt(RenderRepaintBoundary boundary, Offset point) {
-+    final List<HitTestTarget> path = _hitPath(boundary, point);
-+    for (final _VisibleWebView web in _visibleWebViews(boundary)) {
-+      if (path.contains(web.box)) {
-+        return web;
-+      }
-+    }
-+    return null;
-+  }
++  static bool _isPlatformView(HitTestTarget target) =>
++      target is RenderUiKitView || target is PlatformViewRenderBox || target is RenderAndroidView;
 +
 +  List<HitTestTarget> _hitPath(RenderRepaintBoundary boundary, Offset point) {
 +    final BoxHitTestResult result = BoxHitTestResult();
@@ -523,6 +551,7 @@ index 0000000..504da28
 +        'type' => await _type(current, '${command['value'] ?? ''}'),
 +        'scroll' => await _scroll(_number(command['dy'])),
 +        'back' => await _back(),
++        'home' => _home(),
 +        _ => throw const _CommandFailed('台北通不支援這個操作。'),
 +      };
 +    } on _CommandFailed catch (error) {
@@ -534,6 +563,7 @@ index 0000000..504da28
 +      message = '沒有成功，請再試一次。';
 +    }
 +    _forceFrame = true;
++    debugPrint('a11y share: command ${command['action']} ${command['x'] ?? ''} ${command['y'] ?? ''} → ${ok ? 'ok' : 'failed'}：$message');
 +    final Map<String, Object?> result = {'type': 'result', 'command_id': id, 'ok': ok, 'message': message};
 +    _sendJson(result);
 +    return result;
@@ -550,6 +580,7 @@ index 0000000..504da28
 +    }
 +
 +    final _VisibleWebView? web = _webViewAt(boundary, point);
++    debugPrint('a11y share: tap $point → ${web == null ? 'App 畫面' : '網頁 ${web.rect}'}');
 +    if (web != null) {
 +      return _tapWeb(current, web, point - web.rect.topLeft);
 +    }
@@ -710,9 +741,14 @@ index 0000000..504da28
 +    final Offset center = boundary.size.center(Offset.zero);
 +    final _VisibleWebView? web = _webViewAt(boundary, center);
 +    if (web != null) {
-+      await web.controller.evaluateJavascript(source: 'window.scrollBy(0, ${dy.round()})');
++      final Offset inWeb = center - web.rect.topLeft;
++      await web.controller.evaluateJavascript(
++        source: '($_scrollJs)(${inWeb.dx}, ${inWeb.dy}, ${dy.round()}, ${web.box.size.width})',
++      );
 +    } else {
-+      final double distance = dy.clamp(-boundary.size.height * 0.6, boundary.size.height * 0.6);
++      // 手指要先移動超過一小段（kTouchSlop）才算開始捲，所以多拖這一段
++      final double limit = boundary.size.height * 0.6;
++      final double distance = dy.clamp(-limit, limit) + dy.sign * kTouchSlop;
 +      await _drag(boundary.localToGlobal(center + Offset(0, distance / 2)), distance);
 +    }
 +    return dy > 0 ? '已往下捲。' : '已往上捲。';
@@ -730,6 +766,16 @@ index 0000000..504da28
 +      return '已回到上一頁。';
 +    }
 +    return '已經是第一頁了。';
++  }
++
++  /// 關掉疊在上面的所有頁面，回到台北通首頁（分享繼續）。
++  String _home() {
++    final NavigatorState? navigator = Get.key.currentState;
++    if (navigator == null || !navigator.canPop()) {
++      return '已經在台北通首頁了。';
++    }
++    navigator.popUntil((Route<dynamic> route) => route.isFirst);
++    return '已回到台北通首頁。';
 +  }
 +
 +  // ---- 網頁裡的點按、填寫（JavaScript） ----
@@ -806,6 +852,20 @@ index 0000000..504da28
 +  var submit = (target.tagName === 'BUTTON' && (type === '' || type === 'submit') && !!target.form) ||
 +    (target.tagName === 'INPUT' && type === 'submit');
 +  return JSON.stringify({ ok: true, label: label, field: field, submit: submit, password: type === 'password' });
++}''';
++
++  /// 捲動那個位置所在、真的可以捲的區塊；找不到就捲整頁。
++  static const String _scrollJs = r'''function (x, y, dy, viewWidth) {
++  var scale = viewWidth > 0 && window.innerWidth > 0 ? window.innerWidth / viewWidth : 1;
++  for (var el = document.elementFromPoint(x * scale, y * scale); el && el !== document.body; el = el.parentElement) {
++    var style = getComputedStyle(el);
++    if (/(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight) {
++      el.scrollBy(0, dy * scale);
++      return true;
++    }
++  }
++  window.scrollBy(0, dy * scale);
++  return true;
 +}''';
 +
 +  static const String _clickJs = r'''function () {
@@ -1263,10 +1323,10 @@ index 3ccbed9..bc4b9a7 100644
    static List<TPWebMessageHandler> get messageHandler => _cachedMessageHandlers;
 diff --git a/test/a11y_share_test.dart b/test/a11y_share_test.dart
 new file mode 100644
-index 0000000..5a9ea19
+index 0000000..86b3af9
 --- /dev/null
 +++ b/test/a11y_share_test.dart
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,227 @@
 +import 'package:flutter/material.dart';
 +import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 +import 'package:flutter_test/flutter_test.dart';
@@ -1420,7 +1480,7 @@ index 0000000..5a9ea19
 +    expect(password.text, isEmpty);
 +  });
 +
-+  testWidgets('家人往下捲、回上一頁', (tester) async {
++  testWidgets('家人往下捲、回上一頁、回到首頁', (tester) async {
 +    await tester.pumpWidget(app());
 +    share();
 +    await tester.pump();
@@ -1439,6 +1499,15 @@ index 0000000..5a9ea19
 +    await tester.pumpAndSettle();
 +    expect(back['message'], '已回到上一頁。');
 +    expect(find.text('第二頁'), findsNothing);
++
++    // 回到首頁：關掉疊在上面的所有頁面
++    await tap(tester, find.text('打開第二頁'));
++    await tester.pumpAndSettle();
++    final Map<String, Object?> home = await command(tester, {'command_id': 'c9', 'action': 'home'});
++    await tester.pumpAndSettle();
++    expect(home['message'], '已回到台北通首頁。');
++    expect(find.text('第二頁'), findsNothing);
++    expect((await command(tester, {'command_id': 'c10', 'action': 'home'}))['message'], '已經在台北通首頁了。');
 +  });
 +
 +  testWidgets('長輩按「停止分享」：先確認，確定後結束', (tester) async {

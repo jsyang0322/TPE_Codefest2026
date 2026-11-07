@@ -7,6 +7,8 @@
 | A. 常見問題語音查詢：用講的問、用聽的聽答案 | 完成（電腦瀏覽器可測；台北通 App 內實測待做） |
 | B. 讓家人幫忙：家人看到長輩**整個台北通的畫面**，並遠端幫忙點按、打字 | 完成（台北通 App 要套用 `townpass/` 的修改，iPhone 實測待做；電腦瀏覽器用模擬服務頁可測） |
 
+文件：[開發說明](DEVELOPMENT.md)、[iPhone 實機測試手冊](IPHONE_TESTING.md)、[Demo 教學](DEMO.md)。
+
 和 `web/`（AI 語音助手）是分開的服務，不共用程式碼。和台北通 App 溝通的訊息格式與 `web/src/bridge/` 相同。
 功能 A 只用 TownPass 已有的 Handler（`voice_listen`、`tts_speak`、`phone_call`）；功能 B 另外需要 `townpass/a11y-share.patch`（App 拍畫面、執行家人的操作，見 [townpass/README.md](townpass/README.md)）。
 

@@ -132,8 +132,9 @@ function setMode(mode) {
   state.mode = mode;
   const elder = state.watching?.elderName ?? '對方';
   $('btn-type').hidden = mode !== 'screen';
+  $('btn-home').hidden = mode !== 'screen';
   $('watch-hint').textContent = mode === 'screen'
-    ? `點畫面上的位置，${elder} 的手機就會在同一個位置按一下。要填寫時，先點欄位，再按「幫忙打字」。送出、付款這類按鈕會先問 ${elder}，密碼請他自己輸入。`
+    ? `點畫面上的位置，${elder} 的手機就會在同一個位置按一下；在畫面上拖曳或滾動滑鼠滾輪可以捲動。要填寫時，先點欄位，再按「幫忙打字」。送出、付款這類按鈕會先問 ${elder}，密碼請他自己輸入。`
     : mode === 'web'
       ? `點畫面上的按鈕，就會在 ${elder} 的手機上按；點輸入框可以幫他填寫。送出、付款這類按鈕會先問 ${elder}，密碼請他自己輸入。`
       : '';
@@ -169,6 +170,15 @@ function showFrame(frame) {
   while (holder.children.length > frame.overlays.length) holder.lastChild.remove();
   $('stage-empty').hidden = true;
   $('screen').hidden = false;
+  fitScreen();
+}
+
+/** 整個手機畫面縮到一次看得完：寬度不超過畫面區，高度不超過視窗 */
+function fitScreen() {
+  if (!state.frame) return;
+  const ratio = state.frame.width / state.frame.height;
+  const width = Math.min($('stage').clientWidth, Math.max(240, (window.innerHeight - 24) * ratio));
+  $('screen').style.width = `${Math.floor(width)}px`;
 }
 
 function hideScreen() {
@@ -180,6 +190,62 @@ function hideScreen() {
 }
 
 let tapMarkTimer = 0;
+
+// 在畫面上拖曳（手指或滑鼠）或滾動滑鼠滾輪 → 對方的手機跟著捲；沒有拖曳就是點按
+let drag = null;
+
+function onScreenPointerDown(event) {
+  if (state.mode !== 'screen' || !state.frame || event.button > 0) return;
+  drag = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+  $('screen').setPointerCapture?.(event.pointerId);
+}
+
+function onScreenPointerMove(event) {
+  if (!drag || event.pointerId !== drag.id) return;
+  if (Math.abs(event.clientX - drag.x) > 10 || Math.abs(event.clientY - drag.y) > 10) drag.moved = true;
+}
+
+function onScreenPointerUp(event) {
+  if (!drag || event.pointerId !== drag.id) return;
+  const start = drag;
+  drag = null;
+  if (!start.moved) {
+    onScreenTap(event);
+    return;
+  }
+  const rect = $('screen').getBoundingClientRect();
+  // 手指往上拖 = 內容往下捲
+  queueScroll(-((event.clientY - start.y) / rect.height) * state.frame.height, true);
+}
+
+function onScreenWheel(event) {
+  if (state.mode !== 'screen' || !state.frame) return;
+  event.preventDefault();
+  const rect = $('screen').getBoundingClientRect();
+  const lines = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rect.height : 1;
+  queueScroll(((event.deltaY * lines) / rect.height) * state.frame.height);
+}
+
+// 滾輪會連續送來很多小段，累積起來每 300 毫秒送一次
+let pendingScroll = 0;
+let scrollTimer = 0;
+
+function queueScroll(dy, now = false) {
+  pendingScroll += dy;
+  if (now) {
+    flushScroll();
+    return;
+  }
+  scrollTimer ||= setTimeout(flushScroll, 300);
+}
+
+function flushScroll() {
+  clearTimeout(scrollTimer);
+  scrollTimer = 0;
+  const dy = Math.max(-5000, Math.min(5000, Math.round(pendingScroll)));
+  pendingScroll = 0;
+  if (Math.abs(dy) >= 20) sendCommand({ action: 'scroll', dy }, '');
+}
 
 function onScreenTap(event) {
   if (state.mode !== 'screen' || !state.frame) return;
@@ -265,6 +331,7 @@ function fit() {
   if (!replayer?.wrapper) return;
   const { width, height } = state.size;
   const scale = Math.min(1, $('stage').clientWidth / width);
+  state.replayScale = scale;
   replayer.wrapper.style.transformOrigin = '0 0';
   replayer.wrapper.style.transform = `scale(${scale})`;
   $('replay').style.height = `${Math.ceil(height * scale)}px`;
@@ -283,6 +350,16 @@ function attachTap() {
   doc.addEventListener('submit', (event) => event.preventDefault(), true);
   doc.addEventListener('mousedown', (event) => event.preventDefault(), true);
   doc.addEventListener('focusin', (event) => event.target?.blur?.(), true);
+  // 滾輪 → 對方的手機跟著捲（重播畫面縮小過，換算回對方手機的大小）
+  doc.addEventListener(
+    'wheel',
+    (event) => {
+      event.preventDefault();
+      const lines = event.deltaMode === 1 ? 16 : 1;
+      queueScroll(event.deltaY * lines);
+    },
+    { passive: false, capture: true },
+  );
 }
 
 function mirrorId(node) {
@@ -456,6 +533,7 @@ function init() {
     'go-back': () => sendCommand({ action: 'back' }, '已請對方的手機回到上一頁…'),
     'input-cancel': closeInput,
     'type-text': openTypeDialog,
+    'go-home': () => sendCommand({ action: 'home' }, '已請對方的手機回到台北通首頁…'),
     async logout() {
       await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
       clearLogin();
@@ -466,8 +544,15 @@ function init() {
     const button = event.target.closest('[data-action]');
     if (button) actions[button.dataset.action]?.();
   });
-  window.addEventListener('resize', fit);
-  $('screen').addEventListener('click', onScreenTap);
+  window.addEventListener('resize', () => {
+    fit();
+    fitScreen();
+  });
+  $('screen').addEventListener('pointerdown', onScreenPointerDown);
+  $('screen').addEventListener('pointermove', onScreenPointerMove);
+  $('screen').addEventListener('pointerup', onScreenPointerUp);
+  $('screen').addEventListener('pointercancel', () => (drag = null));
+  $('screen').addEventListener('wheel', onScreenWheel, { passive: false });
 
   connectEvents({
     token: getToken(),

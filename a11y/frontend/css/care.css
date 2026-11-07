@@ -79,8 +79,8 @@
 .replay { position: relative; overflow: hidden; background: var(--white); }
 .replay .replayer-wrapper { position: absolute; top: 0; left: 0; }
 .replay iframe { border: 0; display: block; background: var(--white); }
-.watch-controls .watch-type { grid-column: 1 / -1; }
-.screen { position: relative; background: var(--white); cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.watch-controls .watch-type { grid-column: span 2; }
+.screen { position: relative; margin: 0 auto; background: var(--white); cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
 .screen img { display: block; width: 100%; height: auto; -webkit-user-drag: none; }
 .screen #screen-overlays img { position: absolute; height: auto; }
 .screen-tap { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; border: 4px solid #ffb300; border-radius: 50%; background: rgba(255, 179, 0, 0.2); pointer-events: none; }

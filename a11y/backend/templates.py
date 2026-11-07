@@ -17,7 +17,7 @@ def link_confirm(caregiver: str) -> str:
 
 def link_activated(other: str, *, for_elder: bool) -> str:
     if for_elder:
-        return f"已同意。現在打開要辦的服務，{other} 就會看到同一個畫面。要停止，請說「停止分享」。"
+        return f"已同意。{other} 現在可以看你的畫面、幫你操作了。要停止，請說「停止分享」。"
     return f"{other} 已同意，可以看他的畫面了。"
 
 
