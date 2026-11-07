@@ -12,7 +12,7 @@ import type { TaskScript } from '../bridge/types';
 import counterCalling from './scripts/counter_calling.json';
 import librarySearch from './scripts/library_search.json';
 import parkingFee from './scripts/parking_fee.json';
-import parkingFeePay from './scripts/parking_fee_pay.json';
+// import parkingFeePay from './scripts/parking_fee_pay.json'; // 繳費腳本停用（見 followUpScripts）
 import { planFollowUp, type FollowUp } from './followup';
 import { routeByKeywords } from './keywords';
 import { slotsFromText } from './normalize';
@@ -34,7 +34,9 @@ export const scripts: Record<string, TaskScript> = {
  * 不放進 scripts，所以 LLM 和關鍵字不會直接挑到。
  */
 const followUpScripts: Record<string, TaskScript> = {
-  parking_fee_pay: parkingFeePay as TaskScript,
+  // 團隊決策（11/8）：AI 不碰繳費功能。繳費腳本停用——planFollowUp 找不到目標就不會發問；
+  // 要重新啟用，把下一行解除註解即可（機制與測試都還在）。
+  // parking_fee_pay: parkingFeePay as TaskScript,
 };
 
 export type { FollowUp };
