@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
-import { useAssistant, phaseLabel } from '../stores/assistant';
+import { useAssistant, phaseLabel, save } from '../stores/assistant';
+import { isOnline } from '../composables/online';
 import { scripts } from '../agent';
 import { inApp } from '../bridge';
 import TaskCard from '../components/TaskCard.vue';
@@ -8,6 +9,8 @@ import MockSpeechInput from '../components/MockSpeechInput.vue';
 
 const assistant = useAssistant();
 onMounted(() => assistant.init());
+// 每次狀態改變就存一份，頁面被回收重新載入時還原
+assistant.$subscribe((_, state) => save(state));
 
 const busy = computed(() => assistant.phase !== 'idle');
 const micLabel = computed(() => (busy.value ? '停止' : '按這裡說話'));
@@ -26,6 +29,12 @@ const phaseIcon: Record<string, string> = {
   <main class="mx-auto flex min-h-dvh max-w-xl flex-col gap-4 px-4 pt-4 pb-40">
     <!-- App 的標題列已經顯示服務名稱，這裡的標題給螢幕閱讀器用 -->
     <h1 class="sr-only">AI 語音助手</h1>
+
+    <!-- 沒有網路：AI 推論在手機上，仍可使用 -->
+    <p v-if="!isOnline" class="tp-card flex gap-3 border-l-4 border-secondary-500 text-lg leading-relaxed" role="status">
+      <span aria-hidden="true">📶</span>
+      <span><strong>目前沒有網路。</strong>您仍然可以問我問題；查詢停車費等服務需要網路。</span>
+    </p>
 
     <!-- 目前狀態：文字＋圖示，不用閃爍動畫 -->
     <p
@@ -67,7 +76,12 @@ const phaseIcon: Record<string, string> = {
 
     <!-- 對話紀錄 -->
     <section v-if="assistant.log.length" aria-labelledby="log-title" class="flex flex-col gap-2">
-      <h2 id="log-title" class="text-lg font-semibold">對話紀錄</h2>
+      <div class="flex items-center justify-between">
+        <h2 id="log-title" class="text-lg font-semibold">對話紀錄</h2>
+        <button type="button" class="min-h-12 px-3 text-base font-semibold text-primary-700 underline" @click="assistant.clear()">
+          清除紀錄
+        </button>
+      </div>
       <ol class="flex flex-col gap-2">
         <li
           v-for="(entry, index) in assistant.log"

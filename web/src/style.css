@@ -55,6 +55,22 @@ body {
   @apply bg-grayscale-50 font-sans text-grayscale-800 antialiased;
 }
 
+/*
+ * 跟著 iPhone「設定 › 顯示與亮度 › 文字大小」放大。
+ * WKWebView 裡的網頁預設不理會系統字級；-apple-system-body 會依使用者設定給字級（預設約 17px），
+ * 全站用 rem，所以整頁一起放大。只在觸控裝置套用：Mac 的 Safari 會把它算成 13px。
+ */
+@supports (font: -apple-system-body) {
+  @media (hover: none) and (pointer: coarse) {
+    html {
+      font: -apple-system-body;
+    }
+    body {
+      font-family: var(--font-sans);
+    }
+  }
+}
+
 /* 卡片：TPCard */
 @utility tp-card {
   @apply rounded-lg bg-white p-4 shadow-card;

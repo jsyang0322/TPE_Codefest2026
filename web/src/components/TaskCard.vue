@@ -8,6 +8,7 @@ const statusText: Record<TaskProgress['status'], string> = {
   done: '完成',
   failed: '這一步沒有成功，您可以自己接著操作',
   stopped: '已停止',
+  interrupted: '畫面重新載入了，結果請看服務頁',
 };
 
 const statusClass: Record<TaskProgress['status'], string> = {
@@ -15,6 +16,7 @@ const statusClass: Record<TaskProgress['status'], string> = {
   done: 'bg-primary-100 text-primary-700',
   failed: 'bg-red-50 text-red-600',
   stopped: 'bg-grayscale-100 text-grayscale-700',
+  interrupted: 'bg-grayscale-100 text-grayscale-700',
 };
 </script>
 
