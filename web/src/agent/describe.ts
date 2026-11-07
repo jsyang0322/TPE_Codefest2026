@@ -18,7 +18,24 @@ function parseDate(text: string): [number, number, number] | null {
 
 const billsTotal = (bills: Bill[]) => bills.reduce((sum, bill) => sum + toAmount(bill['繳費金額']), 0);
 
-function describeBills(bills: Bill[]): string {
+/** 比對車號用：只留英數字。示範站畫面上的「ABC–123」可能是全形或 en dash，直接比對會失敗 */
+const plateKey = (text: string | undefined) => (text ?? '').normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+/**
+ * 只留下車號相符的帳單。示範站是假資料站，不管查什麼車號都回同一套帳單，
+ * 所以要在這裡比對：問到沒有的車牌時，誠實回「查無此車牌」。
+ */
+function matchBills(bills: Bill[], plate?: string): Bill[] {
+  if (!plate) return bills;
+  return bills.filter((bill) => plateKey(bill['車號']) === plateKey(plate));
+}
+
+function describeBills(bills: Bill[], plate?: string): string {
+  const matched = matchBills(bills, plate);
+  if (bills.length > 0 && matched.length === 0) {
+    return `查無車號 ${plate} 的未繳停車費，請確認車牌號碼後再試一次。`;
+  }
+  bills = matched;
   if (bills.length === 0) return '沒有查到未繳的停車費。';
   const total = billsTotal(bills);
   // 解析成數字再比較：字串排序會把 2024/12/31 排在 2024/9/1 前面
@@ -42,8 +59,8 @@ function describeBooks(books: string[], keyword?: string): string {
   const hits = keyword ? books.filter((title) => title.includes(keyword)) : books;
   if (hits.length === 0) {
     return keyword
-      ? `目前的館藏裡沒有找到「${keyword}」相關的書，可以換個書名或作者再試一次。`
-      : '沒有找到相關的書，可以換個書名或作者再試一次。';
+      ? `館藏查無「${keyword}」這本書，可以換個書名或作者再試一次。`
+      : '館藏查無相關的書，可以換個書名或作者再試一次。';
   }
   const names = hits.slice(0, 3).map((title) => `《${shortTitle(title)}》`).join('、');
   return `館藏裡找到 ${hits.length} 本，有${names}${hits.length > 3 ? '等' : ''}。`;
@@ -65,9 +82,9 @@ function describeReceipt(receipt: Bill): string {
 }
 
 /** 結果的摘要值，給接續腳本的確認句使用（例如「共 {total} 元」） */
-export function resultVars(scriptId: string, result: Record<string, unknown>): Record<string, string> {
+export function resultVars(scriptId: string, result: Record<string, unknown>, slots?: Record<string, string>): Record<string, string> {
   if (scriptId === 'parking_fee' && Array.isArray(result.bills)) {
-    const bills = result.bills as Bill[];
+    const bills = matchBills(result.bills as Bill[], slots?.plate);
     return { count: String(bills.length), total: String(billsTotal(bills)) };
   }
   return {};
@@ -80,7 +97,7 @@ export function describeResult(
   slots: Record<string, string> = {},
 ): string {
   if (scriptId === 'parking_fee' && Array.isArray(result.bills)) {
-    return describeBills(result.bills as Bill[]);
+    return describeBills(result.bills as Bill[], slots.plate);
   }
   if (scriptId === 'parking_fee_pay' && result.receipt && typeof result.receipt === 'object') {
     return describeReceipt(result.receipt as Bill);
