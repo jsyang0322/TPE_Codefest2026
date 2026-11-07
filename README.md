@@ -36,12 +36,14 @@
 
 ```mermaid
 flowchart LR
-    App["城市通 App<br/>(Flutter, TownPass fork)"] <-- "flutterObject<br/>postMessage" --> Web["微服務網頁<br/>(web/)"]
-    Web -- "REST API" --> API["後端<br/>(backend/，選配)"]
-    API -- "抓資料" --> Data["開放資料<br/>data.taipei / data.gov.tw / TDX"]
+    subgraph Phone["手機（進入服務後可離線使用）"]
+        Web["微服務網頁<br/>(web/)"] <-- "flutterObject<br/>postMessage" --> App["城市通 App<br/>(Flutter, TownPass fork)"]
+        App --> Model["裝置端模型<br/>語音辨識・LLM・朗讀"]
+    end
+    Data["開放資料<br/>data.taipei 等"] -. "開發時整理後打包" .-> Web
 ```
 
-<!-- TODO：確定技術選型後更新架構圖 -->
+語音辨識、LLM 推論與語音朗讀都在手機上執行，不使用後端。詳細設計見 [docs/系統設計文件.md](docs/系統設計文件.md)。
 
 ## Repo 結構
 
@@ -49,13 +51,13 @@ flowchart LR
 
 | Repo | 內容 |
 | --- | --- |
-| [jsyang0322/TPE_Codefest2026](https://github.com/jsyang0322/TPE_Codefest2026)（本 repo） | 微服務網頁、後端 |
+| [jsyang0322/TPE_Codefest2026](https://github.com/jsyang0322/TPE_Codefest2026)（本 repo） | 微服務網頁、設計文件 |
 | [jsyang0322/TownPass](https://github.com/jsyang0322/TownPass) | fork 自 [taipei-doit/TownPass](https://github.com/taipei-doit/TownPass)，加入本服務的 App 端修改 |
 
 ```
 TPE_Codefest2026/
 ├─ web/        微服務網頁（在城市通 WebView 中執行）
-├─ backend/    後端 API（選配，附 Dockerfile）
+├─ docs/       系統設計文件、Demo 腳本
 ├─ AGENTS.md   AI 工具共用的專案說明與競賽規則
 └─ LICENSE     AGPL-3.0
 ```
@@ -70,7 +72,7 @@ TPE_Codefest2026/
 | Dart SDK | 3.13 以上 |
 | Java | 17（Android 建置） |
 | iOS | 最低 iOS 15，需 Mac 與 Xcode |
-| Node.js | <!-- TODO --> |
+| Node.js | 22 LTS |
 
 ### 1. 城市通 App（TownPass fork）
 
@@ -92,13 +94,6 @@ cd web
 # TODO：安裝與啟動指令
 ```
 
-### 3. 後端（選配）
-
-```bash
-cd backend
-# TODO：安裝與啟動指令
-```
-
 ### 環境變數
 
 | 名稱 | 用途 | 範例 |
@@ -110,14 +105,9 @@ cd backend
 | 元件 | 平台 | 網址 |
 | --- | --- | --- |
 | 微服務網頁 | Firebase Hosting | <!-- TODO：https://xxx.web.app --> |
-| 後端 API | Cloud Run（asia-east1） | <!-- TODO：https://xxx.asia-east1.run.app --> |
 
 ```bash
-# 前端
 cd web && npm run build && firebase deploy --only hosting
-
-# 後端
-cd backend && gcloud run deploy <service-name> --source . --region asia-east1
 ```
 
 ## 資料來源
@@ -134,7 +124,7 @@ cd backend && gcloud run deploy <service-name> --source . --region asia-east1
 
 | 套件 | 版本 | 授權 | 用途 | 使用位置 |
 | --- | --- | --- | --- | --- |
-| <!-- TODO --> | | | | web／backend／App |
+| <!-- TODO --> | | | | web／App |
 
 ## AI 使用聲明
 
