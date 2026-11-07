@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, care, config, db, faq, faq_sync, share, ws
+from . import auth, care, config, db, faq, faq_sync, fines, share, ws
 from .errors import ApiError, api_error_handler
 
 log = logging.getLogger("a11y")
@@ -89,7 +89,7 @@ async def validation_error_handler(_request, exc: RequestValidationError) -> JSO
     return JSONResponse({"error": "invalid_request", "message": "資料格式不正確", "detail": detail}, status_code=422)
 
 
-for router in (faq.router, auth.router, care.router, share.router, ws.router):
+for router in (faq.router, auth.router, care.router, share.router, fines.router, ws.router):
     app.include_router(router)
 
 

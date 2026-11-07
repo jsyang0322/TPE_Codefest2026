@@ -21,7 +21,7 @@ index dca1a3d..3de6ab0 100644
  }
 \ No newline at end of file
 diff --git a/lib/page/city_service/model/my_service_model.dart b/lib/page/city_service/model/my_service_model.dart
-index df00c0c..4f62ec0 100644
+index df00c0c..a3ad0f1 100644
 --- a/lib/page/city_service/model/my_service_model.dart
 +++ b/lib/page/city_service/model/my_service_model.dart
 @@ -1,5 +1,6 @@
@@ -31,15 +31,16 @@ index df00c0c..4f62ec0 100644
  
  // 先於 MyServiceItemId enum 加入新服務；
  // 再在 MyServiceIdExt 擴充中加入該服務的 MyServiceItem 物件。
-@@ -9,6 +10,7 @@ import 'package:town_pass/gen/assets.gen.dart';
+@@ -9,6 +10,8 @@ import 'package:town_pass/gen/assets.gen.dart';
  
  enum MyServiceItemId {
    voiceAgent,
 +  a11y,
++  a11yFines,
    dedicatedLine,
    districtOffice,
    reportIssue,
-@@ -46,6 +48,15 @@ extension MyServiceIdExt on MyServiceItemId {
+@@ -46,6 +49,25 @@ extension MyServiceIdExt on MyServiceItemId {
            destinationUrl: 'https://tpe-codefest2026.web.app',
            forceWebViewTitle: 'AI 語音助手',
          ),
@@ -52,27 +53,38 @@ index df00c0c..4f62ec0 100644
 +          destinationUrl: A11yShareService.serviceUrl,
 +          forceWebViewTitle: '無障礙輔助',
 +        ),
++      MyServiceItemId.a11yFines => MyServiceItem(
++          title: '交通罰單',
++          // 說明不要有「繳費」「繳納」：家人幫忙按的時候，這些字會讓長輩手機先問「同意嗎？」
++          description: '查看罰單、線上繳（示範：讓家人幫忙）',
++          icon: Assets.svg.iconBillCar.svg(),
++          category: MyServiceCategory.cityService,
++          // 無障礙輔助的示範服務，資料是假的，不會真的付款
++          destinationUrl: A11yShareService.finesUrl,
++          forceWebViewTitle: '交通罰單',
++        ),
        MyServiceItemId.dedicatedLine => MyServiceItem(
            title: '1999',
            description: '播打網路語音通話',
 diff --git a/lib/page/city_service/widget/pinned_service_widget_controller.dart b/lib/page/city_service/widget/pinned_service_widget_controller.dart
-index 19724fa..66ba56a 100644
+index 19724fa..a9d2324 100644
 --- a/lib/page/city_service/widget/pinned_service_widget_controller.dart
 +++ b/lib/page/city_service/widget/pinned_service_widget_controller.dart
-@@ -6,6 +6,7 @@ class PinnedServiceWidgetController extends GetxController {
+@@ -6,6 +6,8 @@ class PinnedServiceWidgetController extends GetxController {
      [
        // 這份清單只存在記憶體，App 重開就回到預設；放在預設清單，demo 時不用每次手動加入
        MyServiceItemId.voiceAgent,
 +      MyServiceItemId.a11y,
++      MyServiceItemId.a11yFines,
        MyServiceItemId.locationSearch,
        MyServiceItemId.districtOffice,
        MyServiceItemId.dashboard,
 diff --git a/lib/service/a11y_share_service.dart b/lib/service/a11y_share_service.dart
 new file mode 100644
-index 0000000..cdc7b21
+index 0000000..4cb4211
 --- /dev/null
 +++ b/lib/service/a11y_share_service.dart
-@@ -0,0 +1,958 @@
+@@ -0,0 +1,961 @@
 +import 'dart:async';
 +import 'dart:convert';
 +import 'dart:io';
@@ -108,6 +120,9 @@ index 0000000..cdc7b21
 +    'A11Y_URL',
 +    defaultValue: 'https://a11y.invalid/',
 +  );
++
++  /// 示範服務「交通罰單」（a11y/frontend/demo/fines.html）：資料是假的，示範家人遠端幫長輩繳罰單。
++  static final String finesUrl = Uri.parse(serviceUrl).resolve('demo/fines.html').toString();
 +
 +  /// 測試時後端跑在自己的電腦，用 mkcert 自己產生 https 憑證：
 +  /// `--dart-define=A11Y_ALLOW_SELF_SIGNED=true` 讓 App 傳畫面的連線接受這張憑證（只限 A11Y_URL 那台電腦）。
@@ -1332,10 +1347,10 @@ index 3ccbed9..bc4b9a7 100644
    static List<TPWebMessageHandler> get messageHandler => _cachedMessageHandlers;
 diff --git a/test/a11y_share_test.dart b/test/a11y_share_test.dart
 new file mode 100644
-index 0000000..fe68097
+index 0000000..fec90cb
 --- /dev/null
 +++ b/test/a11y_share_test.dart
-@@ -0,0 +1,244 @@
+@@ -0,0 +1,248 @@
 +import 'package:flutter/material.dart';
 +import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 +import 'package:flutter_test/flutter_test.dart';
@@ -1562,6 +1577,10 @@ index 0000000..fe68097
 +    expect(service.isTrustedOrigin(WebUri('https://a11y.invalid')), isTrue);
 +    expect(service.isTrustedOrigin(WebUri('https://evil.example')), isFalse);
 +    expect(service.isTrustedOrigin(WebUri('http://a11y.invalid')), isFalse);
++  });
++
++  test('示範服務「交通罰單」在無障礙輔助網頁的同一個網站', () {
++    expect(A11yShareService.finesUrl, 'https://a11y.invalid/demo/fines.html');
 +  });
 +}
 +

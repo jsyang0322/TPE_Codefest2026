@@ -2,34 +2,64 @@
 <html lang="zh-Hant-TW">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>台北通無障礙輔助</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="css/base.css">
 </head>
 <body>
-  <main class="page">
-    <h1 id="page-title" tabindex="-1">台北通無障礙輔助</h1>
-    <p class="muted">常見問題語音查詢・讓家人幫忙</p>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="hero-kicker">台北通</p>
+      <h1 id="page-title" tabindex="-1">無障礙輔助</h1>
+      <p>看不清楚、不方便打字，也能用台北通</p>
+    </div>
+  </header>
 
-    <a class="btn btn-primary" href="faq.html">常見問題：用講的問、用聽的聽答案</a>
+  <main class="page">
+    <a class="tile" href="faq.html">
+      <span class="icon-badge" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2z" fill="currentColor"/></svg>
+      </span>
+      <span class="tile-text">
+        <strong>常見問題：用講的問、用聽的聽答案</strong>
+        <span>不用打字，沒有網路也能查</span>
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
 
     <section class="card" aria-labelledby="care-title">
-      <h2 id="care-title">讓家人幫忙（demo：選擇登入身分）</h2>
-      <p class="muted">台北通正式的登入不對外開放，demo 用兩個模擬帳號。用兩支手機，或同一台電腦開兩個分頁。</p>
-      <p id="logged-in" class="muted" hidden></p>
-      <button class="btn btn-primary" type="button" data-login="elder-1" data-page="elder.html">以王阿伯登入（被照顧者）</button>
-      <button class="btn btn-secondary" type="button" data-login="caregiver-1" data-page="caregiver.html">以王小美登入（照顧者）</button>
+      <div class="card-head">
+        <span class="icon-badge amber" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false"><path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="currentColor"/></svg>
+        </span>
+        <div>
+          <h2 id="care-title">讓家人幫忙</h2>
+          <p class="muted">家人在遠方，也能看到你的台北通、幫你操作</p>
+        </div>
+      </div>
+      <p class="muted small">示範用兩個模擬帳號（台北通正式的登入不對外開放）。長輩用手機、家人用另一支手機或電腦，選擇登入身分：</p>
+      <p id="logged-in" class="muted small" hidden></p>
+      <button class="role" type="button" data-login="elder-1" data-page="elder.html">
+        <span class="avatar" aria-hidden="true">阿伯</span>
+        <span class="tile-text"><strong>以王阿伯登入（被照顧者）</strong><span>長輩：讓家人幫我</span></span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="role" type="button" data-login="caregiver-1" data-page="caregiver.html">
+        <span class="avatar teal" aria-hidden="true">小美</span>
+        <span class="tile-text"><strong>以王小美登入（照顧者）</strong><span>家人：幫長輩操作</span></span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
       <p id="login-error" class="bad" role="alert"></p>
     </section>
 
     <section class="card" aria-labelledby="status-title">
-      <h2 id="status-title">連線狀態</h2>
+      <h2 id="status-title" class="h-small">連線狀態</h2>
       <dl class="status">
         <dt>後端</dt>
-        <dd id="status-backend">檢查中…</dd>
+        <dd><span id="status-backend" class="chip">檢查中…</span></dd>
         <dt>台北通 App</dt>
-        <dd id="status-app">檢查中…</dd>
+        <dd><span id="status-app" class="chip">檢查中…</span></dd>
       </dl>
     </section>
   </main>

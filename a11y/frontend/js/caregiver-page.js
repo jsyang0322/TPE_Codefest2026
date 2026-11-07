@@ -42,6 +42,8 @@ function handleError(error) {
 function show(view) {
   $('view-home').hidden = view !== 'home';
   $('view-watch').hidden = view !== 'watch';
+  // 看畫面時收起頁首，對方的手機畫面才放得大
+  document.body.classList.toggle('watching', view === 'watch');
 }
 
 // ---- 授權 ----
@@ -52,20 +54,33 @@ async function refresh() {
   $('links-empty').hidden = links.length > 0;
   $('links-list').replaceChildren(
     ...links.map((link) => {
+      const pending = link.status === 'pending';
       const item = document.createElement('li');
+      item.className = 'person';
+      const head = document.createElement('div');
+      head.className = 'person-head';
+      const avatar = Object.assign(document.createElement('span'), { className: 'avatar', textContent: link.elder.name.slice(-2) });
+      avatar.setAttribute('aria-hidden', 'true');
       const text = document.createElement('p');
-      if (link.status === 'pending') {
-        text.textContent = `等待 ${link.elder.name} 同意…`;
-        item.append(text);
-        return item;
-      }
-      text.textContent = `${link.elder.name} 已同意讓你看他的畫面`;
+      const name = Object.assign(document.createElement('strong'), { textContent: link.elder.name });
+      const detail = Object.assign(document.createElement('span'), {
+        className: 'muted small',
+        textContent: pending ? `等待 ${link.elder.name} 同意…` : `${link.elder.name} 已同意讓你看他的畫面`,
+      });
+      text.append(name, detail);
+      const chip = Object.assign(document.createElement('span'), {
+        className: pending ? 'chip warn' : 'chip ok',
+        textContent: pending ? '等待同意' : '可以看畫面',
+      });
+      head.append(avatar, text, chip);
+      item.append(head);
+      if (pending) return item;
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'btn btn-primary';
       button.textContent = `看 ${link.elder.name} 的畫面`;
       button.addEventListener('click', () => startWatching(link));
-      item.append(text, button);
+      item.append(button);
       return item;
     }),
   );
@@ -145,6 +160,26 @@ function clearStage() {
   destroyReplayer();
   hideScreen();
   setMode(null);
+  $('stage').style.width = '';
+}
+
+// 框框（手機外框）左右各 10px、下方按鈕列約 64px
+const BEZEL = 20;
+const BAR = 64;
+
+const wideScreen = window.matchMedia('(min-width: 900px)');
+
+/** 框框裡的畫面最寬可以多寬：寬螢幕手機在右邊一欄；窄螢幕不超過這一頁的寬度 */
+function stageMaxWidth() {
+  if (wideScreen.matches) return 560;
+  const main = $('main');
+  const padding = parseFloat(getComputedStyle(main).paddingLeft) * 2;
+  return Math.max(200, main.clientWidth - padding - BEZEL);
+}
+
+/** 框框跟著畫面一樣寬，打字框、按鈕列也一樣寬 */
+function setStageWidth(width) {
+  $('stage').style.width = `${Math.floor(width) + BEZEL}px`;
 }
 
 // ---- 台北通 App 的畫面 ----
@@ -178,8 +213,9 @@ function showFrame(frame) {
 function fitScreen() {
   if (!state.frame) return;
   const ratio = state.frame.width / state.frame.height;
-  const width = Math.min($('stage').clientWidth, Math.max(240, (window.innerHeight - 24) * ratio));
+  const width = Math.min(stageMaxWidth(), Math.max(240, (window.innerHeight - 24 - BEZEL - BAR) * ratio));
   $('screen').style.width = `${Math.floor(width)}px`;
+  setStageWidth(width);
 }
 
 function hideScreen() {
@@ -331,11 +367,13 @@ function fit() {
   const replayer = state.replayer;
   if (!replayer?.wrapper) return;
   const { width, height } = state.size;
-  const scale = Math.min(1, $('stage').clientWidth / width);
+  const scale = Math.min(1, stageMaxWidth() / width);
   state.replayScale = scale;
   replayer.wrapper.style.transformOrigin = '0 0';
   replayer.wrapper.style.transform = `scale(${scale})`;
+  $('replay').style.width = `${Math.floor(width * scale)}px`;
   $('replay').style.height = `${Math.ceil(height * scale)}px`;
+  setStageWidth(width * scale);
 }
 
 // ---- 點畫面 → 對方的手機執行 ----
@@ -519,6 +557,7 @@ const handlers = {
 function init() {
   if (!requireLogin()) return;
   $('me').textContent = getUser()?.name ?? '';
+  $('me-avatar').textContent = (getUser()?.name ?? '').slice(-2);
 
   $('code-form').addEventListener('submit', (event) => {
     event.preventDefault();

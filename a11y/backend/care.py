@@ -14,7 +14,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from . import auth, config, consent, share, store, templates
+from . import auth, config, consent, fines, share, store, templates
 from .errors import ApiError
 from .ws import hub
 
@@ -173,6 +173,8 @@ async def confirm_link(link_id: str, body: LinkConfirm, session: store.LoginSess
                     and (old.elder_id, old.caregiver_id) == (link.elder_id, link.caregiver_id)):
                 await close_link(old, "replaced", session.user_id)
         link.status, link.activated_at = "active", now
+        # 示範服務「交通罰單」：每次同意都重新產生假罰單，家人可以從「待繳」開始示範幫忙繳費
+        fines.seed(link.elder_id)
         store.audit(link.id, session.user_id, "link_activated", method="voice" if body.transcript else "tap")
         await hub.send(link.caregiver_id, "link_activated", {
             "link_id": link.id, "speak": templates.link_activated(elder_name, for_elder=False),

@@ -6,6 +6,7 @@
 | --- | --- |
 | A. 常見問題語音查詢：用講的問、用聽的聽答案 | 完成（電腦瀏覽器可測；台北通 App 內實測待做） |
 | B. 讓家人幫忙：家人看到長輩**整個台北通的畫面**，並遠端幫忙點按、打字 | 完成（台北通 App 要套用 `townpass/` 的修改，iPhone 實測待做；電腦瀏覽器用模擬服務頁可測） |
+| 示範服務「交通罰單」：家人遠端幫長輩繳罰單（假資料，不會真的付款） | 完成（台北通首頁有「交通罰單」入口；電腦瀏覽器可測，iPhone 實測待做） |
 
 文件：[開發說明](DEVELOPMENT.md)、[iPhone 實機測試手冊](IPHONE_TESTING.md)、[Demo 教學](DEMO.md)。
 
@@ -44,6 +45,14 @@ frontend/*.html、js/*.js  ── GET /api/faq ──→ SQLite 資料庫 ←─
 
 電腦瀏覽器沒有台北通 App，改用模擬服務頁（`frontend/demo/service.html`）測試：這一頁自己載入分享程式
 （`frontend/js/share-agent.js`，用開源的 rrweb 記錄網頁的變化），家人看到的是這一頁，操作方式相同。
+
+示範服務「交通罰單」（`frontend/demo/fines.html`、`backend/fines.py`）：示範家人幫長輩繳罰單。
+
+- 長輩每次按「同意」讓家人幫忙，後端就重新產生一份假罰單（2 張待繳、1 張已繳），每次示範都從「待繳」開始。
+- 罰單屬於示範的長輩帳號王阿伯，存在後端記憶體；後端重開也會重新產生。
+- 台北通首頁的常用服務有「交通罰單」（`townpass/a11y-share.patch` 加的入口）；電腦瀏覽器測試時，長輩的分享頁有「交通罰單（示範服務）」。
+- 家人點罰單、選付款方式都直接執行；按「確認繳費」時長輩的手機會先問「王小美 想幫你按『確認繳費 600 元』，同意嗎？」。
+  畫面上的字有挑過，只有這一顆會問（付款方式不寫「扣款」，罰單卡片不寫「繳費期限」）。
 
 ## 執行
 
@@ -111,7 +120,7 @@ docker run -d -p 8080:8080 --name a11y a11y      # 埠號可用環境變數 PORT
 ## 測試
 
 ```bash
-.venv/Scripts/python -m pytest          # 後端（綁定、分享畫面、遠端操作、停止分享、常見問題）
+.venv/Scripts/python -m pytest          # 後端（綁定、分享畫面、遠端操作、停止分享、常見問題、交通罰單）
 # 台北通 App 的部分：套用 townpass/a11y-share.patch 後，在 TownPass 執行 fvm flutter test test/a11y_share_test.dart
 node --test "tests/js/*.test.js"        # 前端的搜尋、語音指令、朗讀文字（Node.js 22）
 ```
@@ -134,6 +143,7 @@ node --test "tests/js/*.test.js"        # 前端的搜尋、語音指令、朗�
 | 搜尋用的關鍵字、同義詞 | `backend/data/faq_keywords.json`、`faq_synonyms.json` | 團隊整理（見 AI 使用聲明） |
 | 王阿伯、王小美帳號 | `backend/store.py` | 模擬 |
 | 模擬服務頁（市民服務申辦） | `frontend/demo/service.html` | 模擬（電腦測試用，不會真的送出） |
+| 交通罰單、付款方式 | `backend/fines.py` | 模擬（示範用的假罰單，不會真的付款） |
 
 官方新增題目時，同步程式會列出「還沒有關鍵字」的題目，請補進 `faq_keywords.json`，存檔後立即生效。
 

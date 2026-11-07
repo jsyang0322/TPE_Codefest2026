@@ -9,23 +9,54 @@
   <link rel="stylesheet" href="css/care.css">
 </head>
 <body class="care-elder">
-  <main id="main" class="page care">
-    <header class="care-header">
+  <header class="hero hero-compact">
+    <div class="hero-inner">
+      <p class="hero-kicker">無障礙輔助</p>
       <h1 id="page-title" tabindex="-1">讓家人幫忙</h1>
-      <p class="muted">登入身分：<span id="me"></span><button class="link-btn" type="button" data-action="logout">登出</button></p>
-      <p id="conn" class="note" hidden>連線中斷，正在重新連線…</p>
-    </header>
+    </div>
+  </header>
 
-    <section id="view-home" aria-labelledby="page-title">
-      <p>家人可以用他的手機，看到你在台北通打開的服務畫面，也可以幫你點按、填寫。送出、付款這類重要的按鈕，一定會先問你；你也隨時可以停止分享。</p>
-      <button class="btn btn-primary" type="button" data-action="invite">讓家人幫我</button>
+  <main id="main" class="page care">
+    <div class="card who">
+      <span id="me-avatar" class="avatar" aria-hidden="true"></span>
+      <p class="who-name"><span class="muted small">登入身分</span><strong id="me"></strong></p>
+      <button class="link-btn" type="button" data-action="logout">登出</button>
+    </div>
+    <p id="conn" class="note" hidden>連線中斷，正在重新連線…</p>
+
+    <section id="view-home" aria-labelledby="home-title">
+      <button class="btn btn-primary btn-big" type="button" data-action="invite">讓家人幫我</button>
+      <div class="card home-points">
+        <h2 id="home-title">家人可以遠端幫你用台北通</h2>
+        <ul class="points">
+          <li>
+            <span class="point-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 5C6.5 5 2.7 9.4 1.5 12c1.2 2.6 5 7 10.5 7s9.3-4.4 10.5-7C21.3 9.4 17.5 5 12 5zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm0-2a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" fill="currentColor"/></svg></span>
+            <span>看得到你台北通的畫面</span>
+          </li>
+          <li>
+            <span class="point-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="3.5" fill="currentColor"/><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2" opacity="0.6"/></svg></span>
+            <span>幫你點按、填寫</span>
+          </li>
+          <li>
+            <span class="point-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 2 4 5v6c0 5 3.4 9.6 8 11 4.6-1.4 8-6 8-11V5l-8-3zm-1.2 14.2L7 12.4l1.4-1.4 2.4 2.4 4.8-4.8 1.4 1.4-6.2 6.2z" fill="currentColor"/></svg></span>
+            <span>送出、付款前，一定先問你</span>
+          </li>
+          <li>
+            <span class="point-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM8 8h8v8H8z" fill="currentColor"/></svg></span>
+            <span>你隨時可以停止分享</span>
+          </li>
+        </ul>
+      </div>
     </section>
 
     <section id="view-code" hidden aria-labelledby="code-title">
-      <h2 id="code-title" tabindex="-1">把這組數字告訴家人</h2>
-      <p id="code-digits" class="code"></p>
-      <p id="code-countdown" class="muted"></p>
-      <p class="muted">家人在他的手機輸入這組數字後，會再問你是否同意。</p>
+      <div class="card code-card">
+        <h2 id="code-title" tabindex="-1">把這組數字告訴家人</h2>
+        <p id="code-digits" class="code"></p>
+        <div class="countdown" aria-hidden="true"><span id="code-bar"></span></div>
+        <p id="code-countdown" class="muted small"></p>
+        <p class="muted">家人輸入這組數字後，你的手機會再問你是否同意。</p>
+      </div>
       <button class="btn btn-primary" type="button" data-action="repeat-code">再說一次數字</button>
       <button class="btn btn-secondary" type="button" data-action="cancel-code">取消</button>
     </section>
@@ -35,11 +66,11 @@
         <span class="live-dot" aria-hidden="true"></span>
         <h2 id="sharing-title" tabindex="-1"></h2>
       </div>
-      <p id="sharing-desc"></p>
+      <div class="card"><p id="sharing-desc"></p></div>
       <p id="sharing-warning" class="note" hidden></p>
 
       <!-- 只有電腦瀏覽器測試時顯示（見 elder-page.js renderSharing） -->
-      <div id="services" hidden>
+      <div id="services" class="card" hidden>
         <h3>打開要辦的服務</h3>
         <ul id="service-list" class="service-list"></ul>
       </div>
@@ -50,17 +81,24 @@
 
   <!-- 對話框：同意讓家人看畫面 -->
   <div id="dlg-link" class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-link-title" aria-describedby="dlg-link-desc" hidden>
-    <h2 id="dlg-link-title" tabindex="-1"></h2>
-    <p id="dlg-link-desc">同意後，他可以看到你在台北通打開的服務畫面，也可以幫你點按、填寫。送出、付款這類重要的按鈕，還是會先問你。</p>
-    <button class="btn btn-primary" type="button" data-action="link-accept">同意</button>
-    <button class="btn btn-secondary" type="button" data-action="link-reject">不同意</button>
+    <div class="dialog-body">
+      <span class="icon-badge amber dialog-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false"><path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="currentColor"/></svg>
+      </span>
+      <h2 id="dlg-link-title" tabindex="-1"></h2>
+      <p id="dlg-link-desc">同意後，他可以看到你台北通的畫面，也可以幫你點按、填寫。送出、付款這類重要的按鈕，還是會先問你。</p>
+      <button class="btn btn-primary" type="button" data-action="link-accept">同意</button>
+      <button class="btn btn-secondary" type="button" data-action="link-reject">不同意</button>
+    </div>
   </div>
 
   <!-- 對話框：停止分享確認 -->
   <div id="dlg-revoke" class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-revoke-title" hidden>
-    <h2 id="dlg-revoke-title" tabindex="-1"></h2>
-    <button class="btn btn-danger" type="button" data-action="revoke-confirm">確定停止</button>
-    <button class="btn btn-secondary" type="button" data-action="revoke-cancel">取消</button>
+    <div class="dialog-body">
+      <h2 id="dlg-revoke-title" tabindex="-1"></h2>
+      <button class="btn btn-danger" type="button" data-action="revoke-confirm">確定停止</button>
+      <button class="btn btn-secondary" type="button" data-action="revoke-cancel">取消</button>
+    </div>
   </div>
 
   <!-- 下方說話區：說「讓家人幫我」「同意」「停止分享」等 -->

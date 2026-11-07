@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 function showStatus(id, ok, text) {
   const el = $(id);
   el.textContent = text;
-  el.className = ok ? 'ok' : 'bad';
+  el.className = ok ? 'chip ok' : 'chip bad';
 }
 
 // 從其他頁跳回來登入時，登入後回到原本那一頁（例如還沒登入就打開 caregiver.html）
@@ -40,4 +40,4 @@ fetch('/api/health')
   .then((res) => res.json())
   .then((body) => showStatus('status-backend', body.ok, body.ok ? '連線正常' : '回應異常'))
   .catch(() => showStatus('status-backend', false, '連不到後端'));
-showStatus('status-app', inApp, inApp ? '是，可以使用手機的語音辨識與朗讀' : '否，目前在一般瀏覽器');
+showStatus('status-app', inApp, inApp ? '是，可以用手機的語音' : '否，目前在一般瀏覽器');

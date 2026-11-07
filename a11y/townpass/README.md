@@ -8,12 +8,12 @@
 | `lib/service/a11y_share_service.dart`（新增） | 拍畫面、送到後端；執行家人的點按、打字、捲動、上一頁；重要按鈕先問長輩 |
 | `lib/util/a11y_share_scope.dart`（新增） | 包住整個 App：畫面下方的「正在看你的畫面／停止分享」、問長輩「同意嗎？」的畫面 |
 | `lib/util/web_message_handler/a11y_share_message_handler.dart`（新增） | `a11y_share_start`、`a11y_share_stop` 兩個 Handler；開始分享只接受無障礙輔助網頁送來的訊息 |
-| `test/a11y_share_test.dart`（新增） | 8 個測試：拍畫面、點按、重要按鈕要同意、打字、密碼擋下、捲動、上一頁、停止分享 |
+| `test/a11y_share_test.dart`（新增） | 10 個測試：拍畫面、點按、重要按鈕要同意、打字、密碼擋下、捲動、上一頁、回到首頁、同意後回首頁、停止分享、罰單網址 |
 | `lib/main.dart` | `GetMaterialApp` 加上 `builder`，用 `A11yShareScope` 包住 App（+3 行） |
 | `lib/util/tp_web_view.dart` | `TPInAppWebView` 建立時登記給分享功能（+3 行） |
 | `lib/util/web_message_handler/tp_web_message_listener.dart` | Handler 清單加 2 個（+4 行） |
-| `lib/page/city_service/model/my_service_model.dart` | 城市服務加入「無障礙輔助」（+11 行） |
-| `lib/page/city_service/widget/pinned_service_widget_controller.dart` | 預設放在首頁常用服務，排在 AI 語音助手後面（+1 行） |
+| `lib/page/city_service/model/my_service_model.dart` | 城市服務加入「無障礙輔助」和示範服務「交通罰單」（`A11Y_URL` 底下的 `demo/fines.html`，假資料）（+22 行） |
+| `lib/page/city_service/widget/pinned_service_widget_controller.dart` | 兩個都預設放在首頁常用服務，排在 AI 語音助手後面（+2 行） |
 
 沒有新增任何套件，也沒有改 iOS／Android 的原生設定。沒有在分享時，App 和原本一樣（只多一層 `RepaintBoundary`）。
 
@@ -24,7 +24,7 @@ cd TownPass
 git checkout -b feat/a11y-share
 git apply --check ../TPE_Codefest2026/a11y/townpass/a11y-share.patch   # 先檢查，沒有訊息就是可以套
 git apply ../TPE_Codefest2026/a11y/townpass/a11y-share.patch
-fvm flutter test test/a11y_share_test.dart                             # 8 個測試應該全部通過
+fvm flutter test test/a11y_share_test.dart                             # 10 個測試應該全部通過
 ```
 
 ## 在 iPhone 上執行

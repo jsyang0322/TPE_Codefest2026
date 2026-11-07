@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>交通罰單</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/fines.css">
+</head>
+<body>
+  <!--
+    示範服務「交通罰單」：示範家人遠端幫長輩查罰單、繳罰單。資料是假的，不會真的付款。
+    按鈕上的字有挑過：只有「確認繳費」會讓長輩手機問「同意嗎？」（a11y/townpass/ 的 importantWords），
+    看明細、選付款方式都不會。
+  -->
+  <header class="hero hero-compact">
+    <div class="hero-inner">
+      <a id="back-link" class="hero-back" href="../elder.html" hidden>← 回到「讓家人幫忙」</a>
+      <p class="hero-kicker">台北通・示範服務</p>
+      <h1 id="page-title" tabindex="-1">交通罰單</h1>
+    </div>
+  </header>
+
+  <main class="page fines">
+    <p id="error" class="note" role="alert" hidden></p>
+
+    <!-- 罰單列表 -->
+    <section id="view-list" hidden aria-labelledby="page-title">
+      <div class="card owner">
+        <span class="avatar" aria-hidden="true">車</span>
+        <div>
+          <p class="owner-name"><strong id="owner-name"></strong> 的罰單</p>
+          <p class="muted small">車牌 <span id="owner-plate"></span>・資料來自台北通帳號</p>
+        </div>
+      </div>
+
+      <div class="card due-summary">
+        <p class="muted">待繳罰單</p>
+        <p class="due-total"><span id="due-count"></span> 張，共 <strong id="due-amount"></strong> 元</p>
+      </div>
+
+      <h2 class="section-title">待繳</h2>
+      <p id="unpaid-empty" class="card muted" hidden>沒有待繳的罰單。</p>
+      <ul id="unpaid-list" class="fine-list"></ul>
+
+      <h2 class="section-title">已繳</h2>
+      <ul id="paid-list" class="fine-list"></ul>
+    </section>
+
+    <!-- 罰單明細與付款 -->
+    <section id="view-detail" hidden aria-labelledby="detail-title">
+      <a class="back-link" href="#">← 回罰單列表</a>
+      <div class="card detail-head">
+        <span id="detail-chip" class="chip"></span>
+        <h2 id="detail-title" tabindex="-1"></h2>
+        <p class="detail-amount"><strong id="detail-amount"></strong> 元</p>
+      </div>
+      <div class="card">
+        <dl id="detail-fields" class="fields"></dl>
+      </div>
+
+      <div id="pay-box">
+        <div class="card" role="radiogroup" aria-labelledby="method-title">
+          <h3 id="method-title">付款方式</h3>
+          <div id="method-list" class="method-list"></div>
+        </div>
+        <p class="muted small pay-note">示範服務，不會真的付款。</p>
+        <div class="pay-bar">
+          <button id="pay" class="btn btn-primary" type="button"></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 繳費完成 -->
+    <section id="view-done" hidden aria-labelledby="done-title">
+      <div class="card done">
+        <span class="done-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" fill="currentColor"/></svg>
+        </span>
+        <h2 id="done-title" tabindex="-1">繳費成功</h2>
+        <p class="detail-amount"><strong id="done-amount"></strong> 元</p>
+        <dl id="done-fields" class="fields"></dl>
+        <p class="muted small">示範服務，不會真的付款。</p>
+      </div>
+      <a class="btn btn-secondary" href="#">回罰單列表</a>
+    </section>
+
+    <p id="loading" class="muted">載入中…</p>
+  </main>
+
+  <div id="announce" class="visually-hidden" aria-live="polite"></div>
+
+  <script type="module" src="../js/fines-page.js"></script>
+</body>
+</html>

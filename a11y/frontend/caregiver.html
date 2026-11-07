@@ -10,33 +10,45 @@
   <link rel="stylesheet" href="vendor/rrweb/replay.min.css">
 </head>
 <body class="care-caregiver">
-  <main id="main" class="page care">
-    <header class="care-header">
+  <header class="hero hero-compact">
+    <div class="hero-inner">
+      <p class="hero-kicker">無障礙輔助</p>
       <h1 id="page-title" tabindex="-1">幫家人操作</h1>
-      <p class="muted">登入身分：<span id="me"></span><button class="link-btn" type="button" data-action="logout">登出</button></p>
-      <p id="conn" class="note" hidden>連線中斷，正在重新連線…</p>
-    </header>
+    </div>
+  </header>
 
-    <!-- 訊息（同時是 live region，螢幕閱讀器會念） -->
+  <main id="main" class="page care">
+    <div class="card who">
+      <span id="me-avatar" class="avatar teal" aria-hidden="true"></span>
+      <p class="who-name"><span class="muted small">登入身分</span><strong id="me"></strong></p>
+      <button class="link-btn" type="button" data-action="logout">登出</button>
+    </div>
+    <p id="conn" class="note" hidden>連線中斷，正在重新連線…</p>
+
+    <!-- 訊息（同時是 live region，螢幕閱讀器會念）。捲動時固定在上方，一直看得到 -->
     <p id="status" class="status-box" role="status"></p>
 
     <section id="view-home" aria-labelledby="page-title">
-      <form id="code-form" class="code-form">
+      <form id="code-form" class="card code-form">
         <label for="code-input">輸入家人手機上的 6 位數字</label>
-        <div class="ask-row">
-          <input id="code-input" type="text" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="off" placeholder="例如 482715">
-          <button class="btn btn-primary" type="submit">送出</button>
-        </div>
+        <p class="muted small">請家人打開台北通的「無障礙輔助」，按「讓家人幫我」，再把手機上的數字告訴你。</p>
+        <input id="code-input" class="code-input" type="text" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="off" placeholder="000000">
+        <button class="btn btn-primary" type="submit">送出</button>
       </form>
 
-      <h2>我協助的人</h2>
-      <p id="links-empty" class="muted">目前沒有。</p>
+      <h2 class="section-title">我協助的人</h2>
+      <p id="links-empty" class="card muted">目前沒有。輸入家人給你的數字，他同意後就會出現在這裡。</p>
       <ul id="links-list" class="link-list"></ul>
     </section>
 
     <section id="view-watch" hidden aria-labelledby="watch-title">
-      <h2 id="watch-title" tabindex="-1"></h2>
-      <p id="watch-page" class="watch-page"></p>
+      <div class="watch-head">
+        <div>
+          <h2 id="watch-title" tabindex="-1"></h2>
+          <p id="watch-page" class="watch-page"></p>
+        </div>
+        <button class="btn btn-secondary btn-small" type="button" data-action="leave">不看了</button>
+      </div>
       <!-- 框框 = 對方的手機：畫面、手機下方的按鈕列、打字框都在框框裡。捲動直接在畫面上拖曳或滾動滾輪 -->
       <div id="stage" class="stage">
         <p id="stage-empty" class="stage-empty"></p>
@@ -64,13 +76,21 @@
         </div>
         <!-- 手機下方的按鈕列 -->
         <div id="phone-bar" class="phone-bar" role="group" aria-label="操作對方的手機" hidden>
-          <button class="phone-btn" type="button" data-action="go-back">上一頁</button>
-          <button id="btn-home" class="phone-btn" type="button" data-action="go-home" hidden>首頁</button>
-          <button id="btn-type" class="phone-btn" type="button" data-action="type-text" hidden>打字</button>
+          <button class="phone-btn" type="button" data-action="go-back">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>上一頁</span>
+          </button>
+          <button id="btn-home" class="phone-btn" type="button" data-action="go-home" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>
+            <span>首頁</span>
+          </button>
+          <button id="btn-type" class="phone-btn" type="button" data-action="type-text" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2.5" y="6" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 10h1m3 0h1m3 0h1m3 0h1M7 14h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>打字</span>
+          </button>
         </div>
       </div>
-      <p id="watch-hint" class="muted"></p>
-      <button class="btn btn-secondary" type="button" data-action="leave">不看了，回到我的首頁</button>
+      <p id="watch-hint" class="muted small watch-hint"></p>
     </section>
   </main>
 

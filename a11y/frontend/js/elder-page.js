@@ -26,6 +26,7 @@ const SERVICES = [
   { title: '有話要說', url: 'https://taipei-pass-service.vercel.app/citizen-report/', app: true },
   { title: '臨櫃叫號', url: 'https://taipei-pass-service.vercel.app/counter-calling/', app: true },
   { title: '市政資訊儀表板', url: 'https://dashboard.gov.taipei/', app: true },
+  { title: '交通罰單（示範服務）', url: 'demo/fines.html' },
   { title: '模擬服務頁（測試用）', url: 'demo/service.html' },
 ];
 
@@ -106,10 +107,19 @@ async function showCode({ renewed = false } = {}) {
   }
   state.codeSpeak = data.speak;
   const spaced = data.code.split('').join(' ');
-  $('code-digits').textContent = spaced;
+  // 一個數字一格，看得清楚；螢幕閱讀器念 aria-label
+  $('code-digits').replaceChildren(
+    ...data.code.split('').map((digit) => Object.assign(document.createElement('span'), { textContent: digit })),
+  );
   $('code-digits').setAttribute('aria-label', `數字碼 ${spaced}`);
-  startCountdown('code', data.ttl_seconds, (left) => ($('code-countdown').textContent = C.codeCountdown(left)), () =>
-    showCode({ renewed: true }),
+  startCountdown(
+    'code',
+    data.ttl_seconds,
+    (left) => {
+      $('code-countdown').textContent = C.codeCountdown(left);
+      $('code-bar').style.width = `${(left / data.ttl_seconds) * 100}%`;
+    },
+    () => showCode({ renewed: true }),
   );
   if (state.view !== 'code') {
     show('code');
@@ -357,6 +367,7 @@ function bindActions() {
 function init() {
   if (!requireLogin()) return;
   $('me').textContent = getUser()?.name ?? '';
+  $('me-avatar').textContent = (getUser()?.name ?? '').slice(-2);
   voice = createVoice({
     button: $('btn-talk'),
     label: $('talk-label'),
