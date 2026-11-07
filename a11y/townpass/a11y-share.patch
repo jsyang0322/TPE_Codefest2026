@@ -1,3 +1,25 @@
+diff --git a/lib/main.dart b/lib/main.dart
+index dca1a3d..3de6ab0 100644
+--- a/lib/main.dart
++++ b/lib/main.dart
+@@ -14,6 +14,7 @@ import 'package:town_pass/service/shared_preferences_service.dart';
+ import 'package:town_pass/service/speech_service.dart';
+ import 'package:town_pass/service/subscription_service.dart';
+ import 'package:town_pass/service/task_runner_service.dart';
++import 'package:town_pass/util/a11y_share_scope.dart';
+ import 'package:town_pass/util/tp_colors.dart';
+ import 'package:town_pass/util/tp_route.dart';
+ 
+@@ -85,6 +86,8 @@ class MyApp extends StatelessWidget {
+         NotificationService.requestPermission();
+       },
+       getPages: TPRoute.page,
++      // 無障礙輔助「讓家人幫忙」：分享時家人看得到整個 App 的畫面（沒有分享時和原本一樣）
++      builder: (context, child) => A11yShareScope(child: child ?? const SizedBox.shrink()),
+     );
+   }
+ }
+\ No newline at end of file
 diff --git a/lib/page/city_service/model/my_service_model.dart b/lib/page/city_service/model/my_service_model.dart
 index df00c0c..4f62ec0 100644
 --- a/lib/page/city_service/model/my_service_model.dart
@@ -47,20 +69,34 @@ index 19724fa..66ba56a 100644
        MyServiceItemId.dashboard,
 diff --git a/lib/service/a11y_share_service.dart b/lib/service/a11y_share_service.dart
 new file mode 100644
-index 0000000..005f1e0
+index 0000000..93580b2
 --- /dev/null
 +++ b/lib/service/a11y_share_service.dart
-@@ -0,0 +1,51 @@
-+import 'dart:collection';
+@@ -0,0 +1,872 @@
++import 'dart:async';
++import 'dart:convert';
++import 'dart:io';
++import 'dart:ui' as ui;
 +
++import 'package:flutter/foundation.dart';
++import 'package:flutter/gestures.dart';
++import 'package:flutter/material.dart';
++import 'package:flutter/rendering.dart';
++import 'package:flutter/scheduler.dart';
 +import 'package:flutter_inappwebview/flutter_inappwebview.dart';
++import 'package:get/get.dart';
++import 'package:town_pass/service/speech_service.dart';
 +
-+/// 無障礙輔助「讓家人幫忙」：分享開始後，之後打開的每個服務網頁都放入分享程式，
-+/// 照顧者就能看到同一個畫面，也能幫忙點按、填寫。
++/// 無障礙輔助「讓家人幫忙」：長輩同意後，家人看得到長輩台北通的所有畫面，也能幫忙點按、打字。
 +///
-+/// 分享程式（開源的 rrweb 錄製程式＋分享程式）由無障礙輔助的網頁組好後交給 App，
-+/// App 只負責保存與放入網頁，所以更新分享程式不需要重新安裝 App。
-+/// 程式碼在 TPE_Codefest2026 的 a11y/frontend/js/share-agent.js。
++/// - 畫面：每秒檢查一次，畫面有變化才把台北通的畫面（[A11yShareScope] 裡的 RepaintBoundary）
++///   拍成圖片，送到無障礙輔助的後端轉給家人。網頁（WebView）不是 Flutter 畫的，拍出來是空白，
++///   所以另外用 WebView 自己的截圖補上。
++/// - 操作：家人點畫面的位置傳回來，App 在同一個位置按一下；網頁裡的按鈕用 JavaScript 按。
++///   送出、付款這類重要按鈕，先在長輩手機上問「同意嗎？」，同意才按；密碼欄位家人不能填。
++/// - 長輩隨時可以按畫面下方的「停止分享」。
++///
++/// 後端與家人的網頁在 TPE_Codefest2026 的 a11y/（backend/share.py、frontend/js/caregiver-page.js）。
 +class A11yShareService {
 +  A11yShareService._();
 +
@@ -73,11 +109,59 @@ index 0000000..005f1e0
 +    defaultValue: 'https://a11y.invalid/',
 +  );
 +
-+  String? _script;
++  /// 重要按鈕的字，和網頁版（a11y/frontend/js/share-agent.js）相同
++  static final RegExp importantWords = RegExp('付款|繳費|繳納|支付|結帳|購買|訂購|轉帳|儲值|扣款|送出|提交|確認|確定|申請|報名|預約|刪除|註銷|解除|登出|變更|修改|同意');
 +
-+  bool get active => _script != null;
++  static final RegExp _rejectWords = RegExp('不同意|不要|不行|不好|不可以|取消|拒絕|等一下');
++  static final RegExp _acceptWords = RegExp('同意|可以|好|確定|對|是');
 +
-+  /// 只接受無障礙輔助網頁送來的分享程式：其他網頁不能要求 App 把程式放進別的網頁。
++  static const Duration _tickInterval = Duration(seconds: 1);
++  static const Duration _pingInterval = Duration(seconds: 20);
++  static const Duration _questionTimeout = Duration(seconds: 60);
++
++  /// 圖片的解析度（相對於畫面的邏輯像素）。越大越清楚，但圖片越大。
++  static const double _pixelRatio = 1.5;
++
++  /// 遠端點按用的 pointer 編號，從很大的數字開始，避免和手指的編號重複
++  static const int _pointerDevice = 0xA11;
++  int _nextPointer = 0xA110000;
++
++  /// 拍畫面的範圍。[A11yShareScope] 用它包住整個 App。
++  final GlobalKey boundaryKey = GlobalKey(debugLabel: 'a11y-share');
++
++  /// 正在分享時有值，[A11yShareScope] 依此顯示「正在看你的畫面」與「停止分享」
++  final ValueNotifier<A11yShareSession?> session = ValueNotifier<A11yShareSession?>(null);
++
++  /// 正在問長輩的問題（同意按重要按鈕、確定停止分享）
++  final ValueNotifier<A11yShareQuestion?> question = ValueNotifier<A11yShareQuestion?>(null);
++
++  /// 家人剛剛點的位置，畫一個圈讓長輩知道
++  final ValueNotifier<Offset?> highlight = ValueNotifier<Offset?>(null);
++
++  /// 測試時不連線
++  @visibleForTesting
++  bool connectEnabled = true;
++
++  final List<_WebViewEntry> _webViews = [];
++  final Stopwatch _clock = Stopwatch()..start();
++
++  WebSocket? _socket;
++  Timer? _tickTimer;
++  Timer? _pingTimer;
++  Timer? _reconnectTimer;
++  Timer? _highlightTimer;
++  int _retry = 0;
++
++  bool _frameCallbackAdded = false;
++  int _frames = 0;
++  int _capturedFrames = -1;
++  bool _capturing = false;
++  bool _forceFrame = true;
++  String? _lastFrameKey;
++
++  bool get active => session.value != null;
++
++  /// 只接受無障礙輔助網頁送來的訊息：其他網頁不能要求 App 開始分享。
 +  bool isTrustedOrigin(WebUri? origin) {
 +    final Uri allowed = Uri.parse(serviceUrl);
 +    if (origin == null || origin.scheme != allowed.scheme || origin.host != allowed.host) {
@@ -86,24 +170,978 @@ index 0000000..005f1e0
 +    return !allowed.hasPort || origin.port == allowed.port;
 +  }
 +
-+  void start(String script) => _script = script;
++  // ---- 開始、停止 ----
 +
-+  void stop() => _script = null;
++  /// 長輩同意後，無障礙輔助網頁送來這次的 token。同一個 token 再送一次不會重來（打開網頁時都會送）。
++  void start({required String token, required String caregiverName, required String elderName}) {
++    if (session.value?.token == token) {
++      return;
++    }
++    stop();
++    session.value = A11yShareSession(token: token, caregiverName: caregiverName, elderName: elderName);
++    if (!_frameCallbackAdded) {
++      _frameCallbackAdded = true;
++      // 每畫一次就記一下，沒有新畫面時不用重拍
++      SchedulerBinding.instance.addPersistentFrameCallback((_) => _frames++);
++    }
++    _forceFrame = true;
++    _retry = 0;
++    if (connectEnabled) {
++      _connect();
++      _tickTimer = Timer.periodic(_tickInterval, (_) => _tick());
++    }
++  }
 +
-+  /// 交給 TPWebView 的 initialUserScripts。沒有在分享時回傳 null，網頁和原本完全一樣。
-+  UnmodifiableListView<UserScript>? get userScripts => switch (_script) {
-+        String script => UnmodifiableListView<UserScript>([
-+            UserScript(
-+              source: script,
-+              injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END,
-+              forMainFrameOnly: true,
-+            ),
-+          ]),
-+        null => null,
++  /// 停止分享。[notifyServer] 是長輩在 App 裡按「停止分享」時，請後端結束授權。
++  void stop({bool notifyServer = false}) {
++    if (notifyServer) {
++      _sendJson({'type': 'stop'});
++    }
++    final WebSocket? socket = _socket;
++    _socket = null;
++    socket?.close(WebSocketStatus.normalClosure);
++    _tickTimer?.cancel();
++    _pingTimer?.cancel();
++    _reconnectTimer?.cancel();
++    _highlightTimer?.cancel();
++    _tickTimer = _pingTimer = _reconnectTimer = _highlightTimer = null;
++    session.value = null;
++    highlight.value = null;
++    _lastFrameKey = null;
++    final A11yShareQuestion? pending = question.value;
++    question.value = null;
++    pending?.answer(false);
++  }
++
++  /// 長輩按畫面下方的「停止分享」：先問一次，避免不小心按到。
++  Future<void> confirmStop() async {
++    final A11yShareSession? current = session.value;
++    if (current == null) {
++      return;
++    }
++    question.value?.answer(false); // 家人正在等的請求當作不同意
++    final bool yes = await _ask(A11yShareQuestion(
++      title: '確定不讓 ${current.caregiverName} 看你的畫面了嗎？',
++      acceptLabel: '確定停止',
++      rejectLabel: '取消',
++    ));
++    if (yes && session.value == current) {
++      stop(notifyServer: true);
++      _speak('已停止分享，${current.caregiverName} 看不到你的畫面了。');
++    }
++  }
++
++  void _ended() {
++    final A11yShareSession? current = session.value;
++    stop();
++    if (current != null) {
++      _speak('分享已結束，${current.caregiverName} 看不到你的畫面了。');
++    }
++  }
++
++  // ---- 網頁（WebView） ----
++
++  /// TPInAppWebView 建立時登記，拍畫面時補上網頁的截圖、家人點到網頁時用 JavaScript 按。
++  void attachWebView(InAppWebViewController controller, BuildContext context) {
++    _webViews.removeWhere((entry) => !entry.context.mounted || entry.controller == controller);
++    _webViews.add(_WebViewEntry(controller, context));
++  }
++
++  RenderRepaintBoundary? _boundary() {
++    final RenderObject? object = boundaryKey.currentContext?.findRenderObject();
++    if (object is! RenderRepaintBoundary || !object.attached || !object.hasSize) {
++      return null;
++    }
++    return object;
++  }
++
++  /// 畫面上看得到的網頁：在網頁中間點一下（只是檢查，不會真的按）會點到它，才算看得到
++  /// （被別的頁面蓋住、在背景的分頁都點不到）。
++  List<_VisibleWebView> _visibleWebViews(RenderRepaintBoundary boundary) {
++    _webViews.removeWhere((entry) => !entry.context.mounted);
++    final Rect screen = Offset.zero & boundary.size;
++    final List<_VisibleWebView> result = [];
++    for (final _WebViewEntry entry in _webViews) {
++      final RenderObject? box = entry.context.findRenderObject();
++      if (box is! RenderBox || !box.attached || !box.hasSize) {
++        continue;
++      }
++      final Rect rect = MatrixUtils.transformRect(box.getTransformTo(boundary), Offset.zero & box.size).intersect(screen);
++      if (rect.isEmpty || rect.width < 1 || rect.height < 1) {
++        continue;
++      }
++      if (_hitPath(boundary, rect.center).contains(box)) {
++        result.add(_VisibleWebView(entry.controller, box, rect));
++      }
++    }
++    return result;
++  }
++
++  _VisibleWebView? _webViewAt(RenderRepaintBoundary boundary, Offset point) {
++    final List<HitTestTarget> path = _hitPath(boundary, point);
++    for (final _VisibleWebView web in _visibleWebViews(boundary)) {
++      if (path.contains(web.box)) {
++        return web;
++      }
++    }
++    return null;
++  }
++
++  List<HitTestTarget> _hitPath(RenderRepaintBoundary boundary, Offset point) {
++    final BoxHitTestResult result = BoxHitTestResult();
++    boundary.hitTest(result, position: point);
++    return [for (final HitTestEntry entry in result.path) entry.target];
++  }
++
++  // ---- 連線 ----
++
++  Uri _socketUri(String token) {
++    final Uri base = Uri.parse(serviceUrl);
++    return base.replace(
++      scheme: base.scheme == 'http' ? 'ws' : 'wss',
++      path: '/ws/share',
++      queryParameters: {'token': token},
++    );
++  }
++
++  Future<void> _connect() async {
++    final A11yShareSession? current = session.value;
++    if (current == null) {
++      return;
++    }
++    try {
++      final WebSocket socket = await WebSocket.connect(_socketUri(current.token).toString());
++      if (session.value != current) {
++        await socket.close(WebSocketStatus.normalClosure);
++        return;
++      }
++      _socket = socket;
++      _retry = 0;
++      _forceFrame = true;
++      _lastFrameKey = null;
++      _pingTimer?.cancel();
++      // 也讓後端知道長輩還在用，不會被當成閒置登出
++      _pingTimer = Timer.periodic(_pingInterval, (_) => _sendJson({'type': 'ping'}));
++      socket.listen(
++        _onMessage,
++        onDone: () => _onClosed(socket),
++        onError: (_) {},
++        cancelOnError: false,
++      );
++    } catch (error) {
++      debugPrint('a11y share: connect failed $error');
++      _scheduleReconnect(current);
++    }
++  }
++
++  void _onClosed(WebSocket socket) {
++    if (_socket != socket) {
++      return; // 已經停止，或已經換成新的連線
++    }
++    _socket = null;
++    _pingTimer?.cancel();
++    // 4000：授權結束；4401：token 無效（分享已經結束）
++    if (socket.closeCode == 4000 || socket.closeCode == 4401) {
++      _ended();
++      return;
++    }
++    _scheduleReconnect(session.value);
++  }
++
++  void _scheduleReconnect(A11yShareSession? current) {
++    if (current == null || session.value != current) {
++      return;
++    }
++    final int seconds = [1, 2, 4, 8, 15, 30][_retry.clamp(0, 5)];
++    _retry++;
++    _reconnectTimer?.cancel();
++    _reconnectTimer = Timer(Duration(seconds: seconds), _connect);
++  }
++
++  void _onMessage(dynamic raw) {
++    if (raw is! String) {
++      return;
++    }
++    final Object? message;
++    try {
++      message = jsonDecode(raw);
++    } catch (_) {
++      return;
++    }
++    if (message is! Map<String, dynamic>) {
++      return;
++    }
++    switch (message['type']) {
++      case 'snapshot':
++        _forceFrame = true;
++      case 'command':
++        runCommand(message);
++      case 'closed':
++        _ended();
++    }
++  }
++
++  void _sendJson(Map<String, Object?> message) {
++    try {
++      _socket?.add(jsonEncode(message));
++    } catch (_) {
++      // 連線剛好斷了，重新連線後會重送畫面
++    }
++  }
++
++  // ---- 拍畫面 ----
++
++  Future<void> _tick() async {
++    if (_socket == null || _capturing) {
++      return;
++    }
++    final RenderRepaintBoundary? boundary = _boundary();
++    if (boundary == null) {
++      return;
++    }
++    // 沒有新畫面、也沒有網頁（網頁變化時 Flutter 不會重畫）就不用拍
++    final bool hasWebView = _visibleWebViews(boundary).isNotEmpty;
++    if (!_forceFrame && _frames == _capturedFrames && !hasWebView) {
++      return;
++    }
++    _capturing = true;
++    try {
++      final Map<String, Object?>? frame = await captureFrame();
++      if (frame == null) {
++        return;
++      }
++      final String key = _frameKey(frame);
++      if (!_forceFrame && key == _lastFrameKey) {
++        return;
++      }
++      _forceFrame = false;
++      _lastFrameKey = key;
++      _sendJson(frame);
++    } catch (error) {
++      debugPrint('a11y share: capture failed $error');
++    } finally {
++      _capturing = false;
++    }
++  }
++
++  String _frameKey(Map<String, Object?> frame) {
++    final List<Object?> overlays = frame['overlays'] as List<Object?>;
++    return [frame['image'], for (final Object? overlay in overlays) (overlay as Map)['image']]
++        .map((image) => '${(image as String).length}:${image.hashCode}')
++        .join('|');
++  }
++
++  /// 拍下目前的畫面：App 的畫面（PNG）加上看得到的網頁截圖（JPEG）。座標都是邏輯像素。
++  /// [waitForFrame] 是測試用的：測試環境不會自己畫下一個畫面，不能等。
++  @visibleForTesting
++  Future<Map<String, Object?>?> captureFrame({bool waitForFrame = true}) async {
++    final SchedulerBinding scheduler = SchedulerBinding.instance;
++    if (waitForFrame && (scheduler.hasScheduledFrame || scheduler.schedulerPhase != SchedulerPhase.idle)) {
++      await scheduler.endOfFrame; // 畫完才能拍
++    }
++    final RenderRepaintBoundary? boundary = _boundary();
++    if (boundary == null) {
++      return null;
++    }
++    _capturedFrames = _frames;
++    final List<_VisibleWebView> webViews = _visibleWebViews(boundary);
++    final Size size = boundary.size;
++    final ui.Image image = await boundary.toImage(pixelRatio: _pixelRatio);
++    final ByteData? data;
++    try {
++      data = await image.toByteData(format: ui.ImageByteFormat.png);
++    } finally {
++      image.dispose();
++    }
++    if (data == null) {
++      return null;
++    }
++
++    final List<Map<String, Object?>> overlays = [];
++    String title = '台北通';
++    for (final _VisibleWebView web in webViews) {
++      final Uint8List? shot = await web.controller.takeScreenshot(
++        screenshotConfiguration: ScreenshotConfiguration(compressFormat: CompressFormat.JPEG, quality: 60),
++      );
++      if (shot == null) {
++        continue;
++      }
++      overlays.add({
++        'x': web.rect.left,
++        'y': web.rect.top,
++        'width': web.rect.width,
++        'height': web.rect.height,
++        'image': 'data:image/jpeg;base64,${base64Encode(shot)}',
++      });
++      title = await web.controller.getTitle() ?? title;
++    }
++
++    return {
++      'type': 'frame',
++      'width': size.width,
++      'height': size.height,
++      'image': 'data:image/png;base64,${base64Encode(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes))}',
++      'overlays': overlays,
++      'title': title,
++    };
++  }
++
++  // ---- 家人的操作 ----
++
++  /// 執行家人的操作，結果回給家人。指令格式見 a11y/backend/share.py 的 Command。
++  @visibleForTesting
++  Future<Map<String, Object?>> runCommand(Map<String, dynamic> command) async {
++    final String id = '${command['command_id'] ?? ''}';
++    bool ok = true;
++    String message;
++    try {
++      final A11yShareSession current = session.value ?? (throw const _CommandFailed('分享已結束。'));
++      if (question.value != null) {
++        throw _CommandFailed('正在等 ${current.elderName} 回答，請稍等。');
++      }
++      message = switch (command['action']) {
++        'tap' => await _tap(current, Offset(_number(command['x']), _number(command['y']))),
++        'type' => await _type(current, '${command['value'] ?? ''}'),
++        'scroll' => await _scroll(_number(command['dy'])),
++        'back' => await _back(),
++        _ => throw const _CommandFailed('台北通不支援這個操作。'),
 +      };
++    } on _CommandFailed catch (error) {
++      ok = false;
++      message = error.message;
++    } catch (error) {
++      debugPrint('a11y share: command failed $error');
++      ok = false;
++      message = '沒有成功，請再試一次。';
++    }
++    _forceFrame = true;
++    final Map<String, Object?> result = {'type': 'result', 'command_id': id, 'ok': ok, 'message': message};
++    _sendJson(result);
++    return result;
++  }
++
++  double _number(Object? value) => value is num ? value.toDouble() : throw const _CommandFailed('位置不正確。');
++
++  RenderRepaintBoundary _requireBoundary() => _boundary() ?? (throw const _CommandFailed('台北通的畫面還沒準備好。'));
++
++  Future<String> _tap(A11yShareSession current, Offset point) async {
++    RenderRepaintBoundary boundary = _requireBoundary();
++    if (!(Offset.zero & boundary.size).contains(point)) {
++      throw const _CommandFailed('點到畫面外面了。');
++    }
++
++    final _VisibleWebView? web = _webViewAt(boundary, point);
++    if (web != null) {
++      return _tapWeb(current, web, point - web.rect.topLeft);
++    }
++
++    final String? label = labelAt(point);
++    if (label != null && importantWords.hasMatch(label)) {
++      if (!await _askToPress(current, label)) {
++        throw _CommandFailed('${current.elderName} 不同意按「$label」。');
++      }
++      await SchedulerBinding.instance.endOfFrame; // 等問題的畫面拿掉，才不會按到它
++      boundary = _requireBoundary();
++      _showHighlight(point);
++      await _dispatchTap(boundary.localToGlobal(point));
++      return '${current.elderName} 同意了，已按下「$label」。';
++    }
++
++    _showHighlight(point);
++    _speak(label == null ? '${current.caregiverName} 幫你按了一下' : '${current.caregiverName} 按了「$label」');
++    await _dispatchTap(boundary.localToGlobal(point));
++    return label == null ? '已按下。' : '已按下「$label」。';
++  }
++
++  /// 那個位置的按鈕上寫的字（找不到就是 null）：從點到的元件往外找，找到有字的就停。
++  @visibleForTesting
++  String? labelAt(Offset point) {
++    final RenderRepaintBoundary? boundary = _boundary();
++    if (boundary == null) {
++      return null;
++    }
++    final double limit = boundary.size.width * boundary.size.height * 0.3; // 太大的是整個頁面，不是按鈕
++    for (final HitTestTarget target in _hitPath(boundary, point)) {
++      if (target is! RenderBox || !target.hasSize) {
++        continue;
++      }
++      if (target.size.width * target.size.height > limit) {
++        break;
++      }
++      final String text = _textOf(target);
++      if (text.isNotEmpty) {
++        return text.length > 20 ? '${text.substring(0, 20)}…' : text;
++      }
++    }
++    return null;
++  }
++
++  String _textOf(RenderObject root) {
++    final StringBuffer buffer = StringBuffer();
++    void visit(RenderObject object) {
++      if (buffer.length > 40) {
++        return;
++      }
++      if (object is RenderParagraph) {
++        buffer
++          ..write(object.text.toPlainText(includeSemanticsLabels: false))
++          ..write(' ');
++      }
++      object.visitChildren(visit);
++    }
++
++    visit(root);
++    // 圖示字型的字（私用區）念不出來，拿掉
++    return buffer.toString().replaceAll(RegExp(r'[-]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
++  }
++
++  Future<void> _dispatchTap(Offset position) async {
++    final int pointer = _nextPointer++;
++    GestureBinding.instance.handlePointerEvent(PointerDownEvent(
++      pointer: pointer,
++      device: _pointerDevice,
++      kind: PointerDeviceKind.touch,
++      position: position,
++      timeStamp: _clock.elapsed,
++    ));
++    await Future<void>.delayed(const Duration(milliseconds: 60));
++    GestureBinding.instance.handlePointerEvent(PointerUpEvent(
++      pointer: pointer,
++      device: _pointerDevice,
++      kind: PointerDeviceKind.touch,
++      position: position,
++      timeStamp: _clock.elapsed,
++    ));
++  }
++
++  Future<void> _drag(Offset start, double distance) async {
++    const int steps = 12;
++    final int pointer = _nextPointer++;
++    final Offset delta = Offset(0, -distance / steps);
++    Offset position = start;
++    GestureBinding.instance.handlePointerEvent(PointerDownEvent(
++      pointer: pointer,
++      device: _pointerDevice,
++      kind: PointerDeviceKind.touch,
++      position: position,
++      timeStamp: _clock.elapsed,
++    ));
++    for (int i = 0; i < steps; i++) {
++      await Future<void>.delayed(const Duration(milliseconds: 16));
++      position += delta;
++      GestureBinding.instance.handlePointerEvent(PointerMoveEvent(
++        pointer: pointer,
++        device: _pointerDevice,
++        kind: PointerDeviceKind.touch,
++        position: position,
++        delta: delta,
++        timeStamp: _clock.elapsed,
++      ));
++    }
++    await Future<void>.delayed(const Duration(milliseconds: 150)); // 停一下再放開，不要甩出去
++    GestureBinding.instance.handlePointerEvent(PointerUpEvent(
++      pointer: pointer,
++      device: _pointerDevice,
++      kind: PointerDeviceKind.touch,
++      position: position,
++      timeStamp: _clock.elapsed,
++    ));
++  }
++
++  Future<String> _type(A11yShareSession current, String value) async {
++    final EditableTextState? editable =
++        FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<EditableTextState>();
++    if (editable != null && editable.mounted) {
++      if (editable.widget.obscureText) {
++        throw _CommandFailed('密碼請 ${current.elderName} 自己輸入。');
++      }
++      if (editable.widget.readOnly) {
++        throw const _CommandFailed('這個欄位不能填寫。');
++      }
++      final InputDecoration? decoration = editable.context.findAncestorWidgetOfExactType<InputDecorator>()?.decoration;
++      final String name = decoration?.labelText ?? decoration?.hintText ?? '這個欄位';
++      editable.userUpdateTextEditingValue(
++        TextEditingValue(text: value, selection: TextSelection.collapsed(offset: value.length)),
++        SelectionChangedCause.keyboard,
++      );
++      _speak('${current.caregiverName} 幫你填了「$name」');
++      return '已填好「$name」。';
++    }
++
++    final RenderRepaintBoundary boundary = _requireBoundary();
++    for (final _VisibleWebView web in _visibleWebViews(boundary)) {
++      final Object? raw = await web.controller.evaluateJavascript(source: '($_typeJs)(${jsonEncode(value)})');
++      final Map<String, dynamic> info = _jsResult(raw);
++      switch (info['result']) {
++        case 'ok':
++          final String name = _clean(info['name'], '這個欄位');
++          _speak('${current.caregiverName} 幫你填了「$name」');
++          return '已填好「$name」。';
++        case 'password':
++          throw _CommandFailed('密碼請 ${current.elderName} 自己輸入。');
++        case 'nooption':
++          throw const _CommandFailed('選項裡沒有這個，請輸入選項上的字。');
++      }
++    }
++    throw const _CommandFailed('請先點要填寫的欄位，再按「幫忙打字」。');
++  }
++
++  Future<String> _scroll(double dy) async {
++    final RenderRepaintBoundary boundary = _requireBoundary();
++    final Offset center = boundary.size.center(Offset.zero);
++    final _VisibleWebView? web = _webViewAt(boundary, center);
++    if (web != null) {
++      await web.controller.evaluateJavascript(source: 'window.scrollBy(0, ${dy.round()})');
++    } else {
++      final double distance = dy.clamp(-boundary.size.height * 0.6, boundary.size.height * 0.6);
++      await _drag(boundary.localToGlobal(center + Offset(0, distance / 2)), distance);
++    }
++    return dy > 0 ? '已往下捲。' : '已往上捲。';
++  }
++
++  Future<String> _back() async {
++    final RenderRepaintBoundary boundary = _requireBoundary();
++    final _VisibleWebView? web = _webViewAt(boundary, boundary.size.center(Offset.zero));
++    if (web != null && await web.controller.canGoBack()) {
++      await web.controller.goBack();
++      return '已回到上一頁。';
++    }
++    final NavigatorState? navigator = Get.key.currentState;
++    if (navigator != null && await navigator.maybePop()) {
++      return '已回到上一頁。';
++    }
++    return '已經是第一頁了。';
++  }
++
++  // ---- 網頁裡的點按、填寫（JavaScript） ----
++
++  Future<String> _tapWeb(A11yShareSession current, _VisibleWebView web, Offset point) async {
++    final Object? raw = await web.controller.evaluateJavascript(
++      source: '($_inspectJs)(${point.dx}, ${point.dy}, ${web.box.size.width})',
++    );
++    final Map<String, dynamic> info = _jsResult(raw);
++    if (info['ok'] != true) {
++      throw const _CommandFailed('那裡沒有東西可以按。');
++    }
++    final Offset screenPoint = point + web.rect.topLeft;
++    final bool field = info['field'] == true;
++    final String label = _clean(info['label'], field ? '這個欄位' : '這個按鈕');
++    final bool important = !field && (info['submit'] == true || importantWords.hasMatch(label));
++
++    if (important) {
++      if (!await _askToPress(current, label)) {
++        throw _CommandFailed('${current.elderName} 不同意按「$label」。');
++      }
++    } else {
++      _speak(field ? '${current.caregiverName} 點了「$label」' : '${current.caregiverName} 按了「$label」');
++    }
++    _showHighlight(screenPoint);
++    await web.controller.evaluateJavascript(source: '($_clickJs)()');
++
++    if (important) {
++      return '${current.elderName} 同意了，已按下「$label」。';
++    }
++    if (info['password'] == true) {
++      return '這是密碼欄位，請 ${current.elderName} 自己輸入。';
++    }
++    return field ? '已點「$label」，可以按「幫忙打字」幫忙填寫。' : '已按下「$label」。';
++  }
++
++  Map<String, dynamic> _jsResult(Object? raw) {
++    final Object? value = raw is String ? jsonDecode(raw) : raw;
++    return value is Map<String, dynamic> ? value : const {};
++  }
++
++  String _clean(Object? text, String fallback) {
++    final String value = text is String ? text.replaceAll(RegExp(r'\s+'), ' ').trim() : '';
++    if (value.isEmpty) {
++      return fallback;
++    }
++    return value.length > 20 ? '${value.substring(0, 20)}…' : value;
++  }
++
++  /// 找到那個位置的按鈕或欄位，記在 window.__a11yTarget，回傳它的名字與種類。
++  static const String _inspectJs = r'''function (x, y, viewWidth) {
++  // 網頁沒有設定 viewport（用電腦版寬度排版）時，網頁的座標和畫面上的點不一樣大
++  var scale = viewWidth > 0 && window.innerWidth > 0 ? window.innerWidth / viewWidth : 1;
++  var el = document.elementFromPoint(x * scale, y * scale);
++  if (!el) return JSON.stringify({ ok: false });
++  var target = el.closest('a,button,input,select,textarea,label,summary,[role="button"],[role="link"],[onclick],[contenteditable]') || el;
++  window.__a11yTarget = target;
++  var type = (target.getAttribute('type') || '').toLowerCase();
++  var field = target.isContentEditable || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' ||
++    (target.tagName === 'INPUT' && !/^(button|submit|reset|checkbox|radio|file|image|hidden|range|color)$/.test(type));
++  var label = '';
++  if (field) {
++    if (target.id) {
++      var forLabel = document.querySelector('label[for="' + CSS.escape(target.id) + '"]');
++      if (forLabel) label = forLabel.textContent;
++    }
++    if (!label && target.closest('label')) label = target.closest('label').textContent;
++    label = label || target.getAttribute('aria-label') || target.getAttribute('placeholder') || target.getAttribute('name') || '';
++  } else if (target.tagName === 'INPUT') {
++    label = target.value || target.getAttribute('aria-label') || '';
++  } else {
++    label = target.getAttribute('aria-label') || target.innerText || target.textContent || target.getAttribute('title') || '';
++  }
++  var submit = (target.tagName === 'BUTTON' && (type === '' || type === 'submit') && !!target.form) ||
++    (target.tagName === 'INPUT' && type === 'submit');
++  return JSON.stringify({ ok: true, label: label, field: field, submit: submit, password: type === 'password' });
++}''';
++
++  static const String _clickJs = r'''function () {
++  var t = window.__a11yTarget;
++  if (!t) return false;
++  if (t.focus) t.focus();
++  if (t.click) t.click();
++  return true;
++}''';
++
++  /// 填入目前選取的欄位。用原生的 setter，React、Vue 這類框架才會收到變化。
++  static const String _typeJs = r'''function (value) {
++  var el = document.activeElement;
++  if (!el || el === document.body) return JSON.stringify({ result: 'none' });
++  var name = '';
++  if (el.id) {
++    var forLabel = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
++    if (forLabel) name = forLabel.textContent;
++  }
++  if (!name && el.closest('label')) name = el.closest('label').textContent;
++  name = name || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.getAttribute('name') || '';
++  if (el.tagName === 'INPUT' && el.type === 'password') return JSON.stringify({ result: 'password' });
++  if (el.isContentEditable) {
++    el.textContent = value;
++  } else if (el.tagName === 'SELECT') {
++    var option = Array.prototype.find.call(el.options, function (o) {
++      return o.value === value || o.textContent.trim() === value;
++    }) || Array.prototype.find.call(el.options, function (o) { return o.textContent.indexOf(value) >= 0; });
++    if (!option) return JSON.stringify({ result: 'nooption' });
++    el.value = option.value;
++  } else if ('value' in el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
++    var proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
++    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
++  } else {
++    return JSON.stringify({ result: 'none' });
++  }
++  el.dispatchEvent(new Event('input', { bubbles: true }));
++  el.dispatchEvent(new Event('change', { bubbles: true }));
++  return JSON.stringify({ result: 'ok', name: name });
++}''';
++
++  // ---- 問長輩、念給長輩聽 ----
++
++  Future<bool> _askToPress(A11yShareSession current, String label) {
++    return _ask(
++      A11yShareQuestion(
++        title: '${current.caregiverName} 想幫你按「$label」，同意嗎？',
++        acceptLabel: '同意',
++        rejectLabel: '不同意',
++      ),
++      speech: '${current.caregiverName} 想幫你按「$label」，同意嗎？同意請說「同意」，不同意請說「不同意」。',
++    );
++  }
++
++  /// 顯示問題，等長輩按按鈕或用說的回答。60 秒沒回答當作不同意。
++  Future<bool> _ask(A11yShareQuestion q, {String? speech}) async {
++    question.value = q;
++    final Timer timeout = Timer(_questionTimeout, () => q.answer(false));
++    if (speech != null) {
++      _listenForAnswer(q, speech);
++    }
++    try {
++      return await q.future;
++    } finally {
++      timeout.cancel();
++      if (question.value == q) {
++        question.value = null;
++      }
++      if (speech != null) {
++        // 按按鈕回答了：不用再念、再聽
++        final SpeechService? speechService = _speech;
++        unawaited(speechService?.stopSpeaking().catchError((_) {}));
++        unawaited(speechService?.stopListening().catchError((_) {}));
++      }
++    }
++  }
++
++  Future<void> _listenForAnswer(A11yShareQuestion q, String speech) async {
++    final SpeechService? speechService = _speech;
++    if (speechService == null) {
++      return;
++    }
++    try {
++      await speechService.speak(speech);
++      if (q.answered) {
++        return;
++      }
++      final String heard = await speechService.listen();
++      if (_rejectWords.hasMatch(heard)) {
++        q.answer(false);
++      } else if (_acceptWords.hasMatch(heard)) {
++        q.answer(true);
++      }
++    } catch (_) {
++      // 沒聽到或不能用語音：按按鈕回答
++    }
++  }
++
++  SpeechService? get _speech => Get.isRegistered<SpeechService>() ? Get.find<SpeechService>() : null;
++
++  void _speak(String text) {
++    _speech?.speak(text).catchError((_) {});
++  }
++
++  void _showHighlight(Offset point) {
++    highlight.value = point;
++    _highlightTimer?.cancel();
++    _highlightTimer = Timer(const Duration(milliseconds: 1200), () => highlight.value = null);
++  }
++}
++
++class A11yShareSession {
++  final String token;
++  final String caregiverName;
++  final String elderName;
++
++  const A11yShareSession({required this.token, required this.caregiverName, required this.elderName});
++}
++
++class A11yShareQuestion {
++  final String title;
++  final String acceptLabel;
++  final String rejectLabel;
++  final Completer<bool> _completer = Completer<bool>();
++
++  A11yShareQuestion({required this.title, required this.acceptLabel, required this.rejectLabel});
++
++  Future<bool> get future => _completer.future;
++
++  bool get answered => _completer.isCompleted;
++
++  void answer(bool yes) {
++    if (!_completer.isCompleted) {
++      _completer.complete(yes);
++    }
++  }
++}
++
++class _WebViewEntry {
++  final InAppWebViewController controller;
++  final BuildContext context;
++
++  _WebViewEntry(this.controller, this.context);
++}
++
++class _VisibleWebView {
++  final InAppWebViewController controller;
++  final RenderBox box;
++  final Rect rect;
++
++  _VisibleWebView(this.controller, this.box, this.rect);
++}
++
++class _CommandFailed implements Exception {
++  final String message;
++
++  const _CommandFailed(this.message);
++}
+diff --git a/lib/util/a11y_share_scope.dart b/lib/util/a11y_share_scope.dart
+new file mode 100644
+index 0000000..cac6c9b
+--- /dev/null
++++ b/lib/util/a11y_share_scope.dart
+@@ -0,0 +1,189 @@
++import 'package:flutter/material.dart';
++import 'package:town_pass/service/a11y_share_service.dart';
++
++/// 包住整個 App（main.dart 的 `builder`），讓無障礙輔助「讓家人幫忙」能拍下台北通的畫面。
++///
++/// 沒有分享時和原本一樣，只多一層 RepaintBoundary。分享時：
++/// - 畫面下方出現「王小美 正在看你的畫面」與「停止分享」（不會被拍進去，也不會被家人按到）
++/// - 家人點的位置畫一個圈
++/// - 家人要按重要按鈕時，蓋上一層問「同意嗎？」（家人看不到也按不到）
++class A11yShareScope extends StatelessWidget {
++  final Widget child;
++
++  const A11yShareScope({super.key, required this.child});
++
++  @override
++  Widget build(BuildContext context) {
++    final A11yShareService service = A11yShareService.instance;
++    return ValueListenableBuilder<A11yShareSession?>(
++      valueListenable: service.session,
++      child: RepaintBoundary(key: service.boundaryKey, child: child),
++      builder: (context, session, app) {
++        // 結構不管有沒有分享都一樣，App 的頁面才不會被重建
++        return Stack(
++          fit: StackFit.expand,
++          children: [
++            Column(
++              children: [
++                Expanded(
++                  child: MediaQuery.removePadding(
++                    context: context,
++                    removeBottom: session != null, // 下方的安全區域改由提示列使用
++                    child: app!,
++                  ),
++                ),
++                if (session != null) _SharingBar(session: session),
++              ],
++            ),
++            if (session != null) ...[
++              ValueListenableBuilder<Offset?>(
++                valueListenable: service.highlight,
++                builder: (context, point, _) => switch (point) {
++                  Offset point => Positioned(
++                      left: point.dx - 28,
++                      top: point.dy - 28,
++                      child: const IgnorePointer(child: _TapRing()),
++                    ),
++                  null => const Positioned(left: 0, top: 0, child: SizedBox.shrink()),
++                },
++              ),
++              ValueListenableBuilder<A11yShareQuestion?>(
++                valueListenable: service.question,
++                builder: (context, question, _) => switch (question) {
++                  A11yShareQuestion question => Positioned.fill(child: _QuestionCard(question: question)),
++                  null => const Positioned(left: 0, top: 0, child: SizedBox.shrink()),
++                },
++              ),
++            ],
++          ],
++        );
++      },
++    );
++  }
++}
++
++const Color _barColor = Color(0xFFFFE08A);
++const Color _barText = Color(0xFF3A2E00);
++const Color _danger = Color(0xFFB3261E);
++const Color _brand = Color(0xFF2F6A75);
++
++class _SharingBar extends StatelessWidget {
++  final A11yShareSession session;
++
++  const _SharingBar({required this.session});
++
++  @override
++  Widget build(BuildContext context) {
++    return Material(
++      color: _barColor,
++      child: SafeArea(
++        top: false,
++        child: Padding(
++          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
++          child: Row(
++            children: [
++              Container(
++                width: 12,
++                height: 12,
++                decoration: const BoxDecoration(color: _danger, shape: BoxShape.circle),
++              ),
++              const SizedBox(width: 10),
++              Expanded(
++                child: Text(
++                  '${session.caregiverName} 正在看你的畫面',
++                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _barText),
++                ),
++              ),
++              const SizedBox(width: 8),
++              FilledButton(
++                onPressed: A11yShareService.instance.confirmStop,
++                style: FilledButton.styleFrom(
++                  backgroundColor: _danger,
++                  minimumSize: const Size(96, 48),
++                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
++                ),
++                child: const Text('停止分享'),
++              ),
++            ],
++          ),
++        ),
++      ),
++    );
++  }
++}
++
++class _TapRing extends StatelessWidget {
++  const _TapRing();
++
++  @override
++  Widget build(BuildContext context) {
++    return Container(
++      width: 56,
++      height: 56,
++      decoration: BoxDecoration(
++        shape: BoxShape.circle,
++        border: Border.all(color: const Color(0xFFFFB300), width: 4),
++        color: const Color(0x33FFB300),
++      ),
++    );
++  }
++}
++
++class _QuestionCard extends StatelessWidget {
++  final A11yShareQuestion question;
++
++  const _QuestionCard({required this.question});
++
++  @override
++  Widget build(BuildContext context) {
++    // BlockSemantics：螢幕閱讀器只讀這個問題，不會讀到後面的畫面
++    return BlockSemantics(
++      child: Material(
++        color: Colors.black54,
++        child: SafeArea(
++          child: Center(
++            child: Container(
++              margin: const EdgeInsets.all(24),
++              padding: const EdgeInsets.all(24),
++              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
++              child: Column(
++                mainAxisSize: MainAxisSize.min,
++                crossAxisAlignment: CrossAxisAlignment.stretch,
++                children: [
++                  Semantics(
++                    header: true,
++                    liveRegion: true,
++                    child: Text(
++                      question.title,
++                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, height: 1.4),
++                    ),
++                  ),
++                  const SizedBox(height: 20),
++                  FilledButton(
++                    onPressed: () => question.answer(true),
++                    style: FilledButton.styleFrom(
++                      backgroundColor: _brand,
++                      minimumSize: const Size.fromHeight(56),
++                      textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
++                    ),
++                    child: Text(question.acceptLabel),
++                  ),
++                  const SizedBox(height: 12),
++                  OutlinedButton(
++                    onPressed: () => question.answer(false),
++                    style: OutlinedButton.styleFrom(
++                      foregroundColor: _brand,
++                      minimumSize: const Size.fromHeight(56),
++                      textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
++                    ),
++                    child: Text(question.rejectLabel),
++                  ),
++                ],
++              ),
++            ),
++          ),
++        ),
++      ),
++    );
++  }
 +}
 diff --git a/lib/util/tp_web_view.dart b/lib/util/tp_web_view.dart
-index f71d113..1c3fd95 100644
+index f71d113..cface39 100644
 --- a/lib/util/tp_web_view.dart
 +++ b/lib/util/tp_web_view.dart
 @@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
@@ -114,26 +1152,28 @@ index f71d113..1c3fd95 100644
  import 'package:town_pass/service/task_runner_service.dart';
  import 'package:town_pass/util/tp_app_bar.dart';
  import 'package:town_pass/util/tp_colors.dart';
-@@ -88,6 +89,8 @@ class TPWebView extends StatelessWidget {
-       body: TPTaskOverlay(
-         enabled: runsTask,
-         child: TPInAppWebView(
-+          // 無障礙輔助分享畫面中：放入分享程式，讓照顧者看到這個網頁（沒有分享時是 null，和原本一樣）
-+          initialUserScripts: A11yShareService.instance.userScripts,
-           initialSettings: switch (runsTask) {
-             true => InAppWebViewSettings(isInspectable: !kReleaseMode, useShouldOverrideUrlLoading: true),
-             false => null,
+@@ -291,6 +292,8 @@ class TPInAppWebView extends StatelessWidget {
+   Widget build(BuildContext context) {
+     return InAppWebView(
+       onWebViewCreated: (controller) async {
++        // 無障礙輔助「讓家人幫忙」：分享畫面時補上網頁的截圖、幫忙按網頁裡的按鈕
++        A11yShareService.instance.attachWebView(controller, context);
+         await controller.addWebMessageListener(TPWebMessageListener.webMessageListener());
+         onWebViewCreated?.call(controller);
+       },
 diff --git a/lib/util/web_message_handler/a11y_share_message_handler.dart b/lib/util/web_message_handler/a11y_share_message_handler.dart
 new file mode 100644
-index 0000000..2993b1c
+index 0000000..ac852ff
 --- /dev/null
 +++ b/lib/util/web_message_handler/a11y_share_message_handler.dart
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,54 @@
 +import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 +import 'package:town_pass/service/a11y_share_service.dart';
 +import 'package:town_pass/util/web_message_handler/tp_web_message_handler.dart';
 +
-+/// 無障礙輔助網頁開始分享畫面：{ name: 'a11y_share_start', data: { script } }
++/// 無障礙輔助網頁開始分享畫面：
++/// { name: 'a11y_share_start', data: { token, caregiver_name, elder_name } }
++/// 長輩同意後送出，之後家人看得到台北通的所有畫面。
 +/// 只接受無障礙輔助網頁（A11yShareService.serviceUrl）送來的訊息，回覆 true／false。
 +class A11yShareStartMessageHandler extends TPWebMessageHandler {
 +  @override
@@ -147,18 +1187,25 @@ index 0000000..2993b1c
 +    required Function(WebMessage replyWebMessage)? onReply,
 +  }) async {
 +    final A11yShareService service = A11yShareService.instance;
-+    final Object? script = message is Map ? message['script'] : null;
-+    if (!isMainFrame || !service.isTrustedOrigin(sourceOrigin) || script is! String || script.isEmpty) {
++    final String? token = _text(message, 'token');
++    final String? caregiverName = _text(message, 'caregiver_name');
++    final String? elderName = _text(message, 'elder_name');
++    if (!isMainFrame || !service.isTrustedOrigin(sourceOrigin) || token == null || caregiverName == null || elderName == null) {
 +      onReply?.call(replyWebMessage(data: false));
 +      return;
 +    }
-+    service.start(script);
++    service.start(token: token, caregiverName: caregiverName, elderName: elderName);
 +    onReply?.call(replyWebMessage(data: true));
++  }
++
++  String? _text(Object? message, String key) {
++    final Object? value = message is Map ? message[key] : null;
++    return value is String && value.isNotEmpty && value.length <= 100 ? value : null;
 +  }
 +}
 +
-+/// 停止分享：{ name: 'a11y_share_stop' }。被照顧者按「停止分享」或分享已結束時，
-+/// 分享程式會從服務網頁送出，所以任何網頁都可以要求停止。
++/// 停止分享：{ name: 'a11y_share_stop' }。分享結束時無障礙輔助網頁會送出。
++/// 停止不會造成危險，所以任何網頁都可以要求停止。
 +class A11yShareStopMessageHandler extends TPWebMessageHandler {
 +  @override
 +  String get name => 'a11y_share_stop';
@@ -195,3 +1242,227 @@ index 3ccbed9..bc4b9a7 100644
        ];
  
    static List<TPWebMessageHandler> get messageHandler => _cachedMessageHandlers;
+diff --git a/test/a11y_share_test.dart b/test/a11y_share_test.dart
+new file mode 100644
+index 0000000..5a9ea19
+--- /dev/null
++++ b/test/a11y_share_test.dart
+@@ -0,0 +1,218 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_inappwebview/flutter_inappwebview.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:get/get.dart';
++import 'package:town_pass/service/a11y_share_service.dart';
++import 'package:town_pass/util/a11y_share_scope.dart';
++
++/// 無障礙輔助「讓家人幫忙」：分享整個 App 的畫面、家人遠端點按與打字。
++/// 不連線（connectEnabled = false），直接呼叫 runCommand 模擬家人送來的指令。
++void main() {
++  final A11yShareService service = A11yShareService.instance;
++
++  setUp(() => service.connectEnabled = false);
++  tearDown(service.stop);
++
++  final List<String> pressed = [];
++  final TextEditingController name = TextEditingController();
++  final TextEditingController password = TextEditingController();
++  final ScrollController scroll = ScrollController();
++
++  Widget app() {
++    pressed.clear();
++    name.clear();
++    password.clear();
++    return GetMaterialApp(
++      builder: (context, child) => A11yShareScope(child: child ?? const SizedBox.shrink()),
++      home: Scaffold(
++        body: ListView(
++          controller: scroll,
++          children: [
++            const _Counter(),
++            ElevatedButton(onPressed: () => pressed.add('next'), child: const Text('下一步')),
++            ElevatedButton(onPressed: () => pressed.add('submit'), child: const Text('送出申請')),
++            TextField(key: const Key('name'), controller: name, decoration: const InputDecoration(labelText: '姓名')),
++            TextField(key: const Key('password'), controller: password, obscureText: true, decoration: const InputDecoration(labelText: '密碼')),
++            ElevatedButton(
++              onPressed: () => Get.to(() => const Scaffold(body: Center(child: Text('第二頁')))),
++              child: const Text('打開第二頁'),
++            ),
++            for (int i = 0; i < 30; i++) SizedBox(height: 60, child: Text('第 $i 行')),
++          ],
++        ),
++      ),
++    );
++  }
++
++  void share() => service.start(token: 't1', caregiverName: '王小美', elderName: '王阿伯');
++
++  Offset center(WidgetTester tester, Finder finder) => tester.getCenter(finder);
++
++  Future<Map<String, Object?>> command(WidgetTester tester, Map<String, dynamic> command) async {
++    final Future<Map<String, Object?>> result = service.runCommand(command);
++    // 等點按做完，也等標示位置的圈消失（1.2 秒）
++    for (int i = 0; i < 30; i++) {
++      await tester.pump(const Duration(milliseconds: 50));
++    }
++    return result;
++  }
++
++  Future<Map<String, Object?>> tap(WidgetTester tester, Finder finder) {
++    final Offset point = center(tester, finder);
++    return command(tester, {'command_id': 'c1', 'action': 'tap', 'x': point.dx, 'y': point.dy});
++  }
++
++  testWidgets('沒有分享時畫面和原本一樣；開始分享後出現提示列，頁面不會重建', (tester) async {
++    await tester.pumpWidget(app());
++    expect(find.text('停止分享'), findsNothing);
++
++    await tester.tap(find.byKey(const Key('counter')));
++    await tester.pump();
++    expect(find.text('按了 1 次'), findsOneWidget);
++
++    share();
++    await tester.pump();
++    expect(find.text('王小美 正在看你的畫面'), findsOneWidget);
++    expect(find.text('停止分享'), findsOneWidget);
++    expect(find.text('按了 1 次'), findsOneWidget, reason: '開始分享不能讓 App 的頁面重來');
++  });
++
++  testWidgets('拍下整個 App 的畫面（不含提示列）', (tester) async {
++    await tester.pumpWidget(app());
++    share();
++    await tester.pump();
++
++    final Map<String, Object?>? frame = await tester.runAsync<Map<String, Object?>?>(() => service.captureFrame(waitForFrame: false));
++    expect(frame, isNotNull);
++    expect(frame!['type'], 'frame');
++    expect(frame['image'] as String, startsWith('data:image/png;base64,'));
++    expect(frame['width'], 800.0);
++    expect(frame['height'], lessThan(600.0), reason: '提示列不在拍下的畫面裡');
++    expect(frame['overlays'], isEmpty);
++  });
++
++  testWidgets('家人點一般按鈕：直接按', (tester) async {
++    await tester.pumpWidget(app());
++    share();
++    await tester.pump();
++
++    final Map<String, Object?> result = await tap(tester, find.text('下一步'));
++    expect(result, {'type': 'result', 'command_id': 'c1', 'ok': true, 'message': '已按下「下一步」。'});
++    expect(pressed, ['next']);
++  });
++
++  testWidgets('家人點重要按鈕：先問長輩，不同意就不按，同意才按', (tester) async {
++    await tester.pumpWidget(app());
++    share();
++    await tester.pump();
++    final Offset point = center(tester, find.text('送出申請'));
++
++    Future<Map<String, Object?>> result = service.runCommand({'command_id': 'c2', 'action': 'tap', 'x': point.dx, 'y': point.dy});
++    await tester.pump();
++    expect(find.text('王小美 想幫你按「送出申請」，同意嗎？'), findsOneWidget);
++
++    // 問的時候家人的其他指令都不執行（也按不到「同意」）
++    final Map<String, Object?> blocked = await tap(tester, find.text('下一步'));
++    expect(blocked['ok'], false);
++    expect(blocked['message'], '正在等 王阿伯 回答，請稍等。');
++
++    await tester.tap(find.text('不同意'));
++    await tester.pump();
++    expect(await result, containsPair('message', '王阿伯 不同意按「送出申請」。'));
++    expect(pressed, isEmpty);
++
++    result = service.runCommand({'command_id': 'c3', 'action': 'tap', 'x': point.dx, 'y': point.dy});
++    await tester.pump();
++    await tester.tap(find.text('同意'));
++    for (int i = 0; i < 30; i++) {
++      await tester.pump(const Duration(milliseconds: 50));
++    }
++    expect(await result, containsPair('message', '王阿伯 同意了，已按下「送出申請」。'));
++    expect(pressed, ['submit']);
++  });
++
++  testWidgets('家人幫忙打字：先點欄位再填；密碼欄位不能填', (tester) async {
++    await tester.pumpWidget(app());
++    share();
++    await tester.pump();
++
++    final Map<String, Object?> none = await command(tester, {'command_id': 'c4', 'action': 'type', 'value': '王大明'});
++    expect(none['ok'], false);
++
++    await tap(tester, find.byKey(const Key('name')));
++    final Map<String, Object?> typed = await command(tester, {'command_id': 'c5', 'action': 'type', 'value': '王大明'});
++    expect(typed['message'], '已填好「姓名」。');
++    expect(name.text, '王大明');
++
++    await tap(tester, find.byKey(const Key('password')));
++    final Map<String, Object?> blocked = await command(tester, {'command_id': 'c6', 'action': 'type', 'value': '1234'});
++    expect(blocked['ok'], false);
++    expect(blocked['message'], '密碼請 王阿伯 自己輸入。');
++    expect(password.text, isEmpty);
++  });
++
++  testWidgets('家人往下捲、回上一頁', (tester) async {
++    await tester.pumpWidget(app());
++    share();
++    await tester.pump();
++
++    final Map<String, Object?> scrolled = await command(tester, {'command_id': 'c7', 'action': 'scroll', 'dy': 300});
++    expect(scrolled['message'], '已往下捲。');
++    expect(scroll.offset, greaterThan(100));
++    scroll.jumpTo(0);
++    await tester.pump();
++
++    await tap(tester, find.text('打開第二頁'));
++    await tester.pumpAndSettle();
++    expect(find.text('第二頁'), findsOneWidget);
++
++    final Map<String, Object?> back = await command(tester, {'command_id': 'c8', 'action': 'back'});
++    await tester.pumpAndSettle();
++    expect(back['message'], '已回到上一頁。');
++    expect(find.text('第二頁'), findsNothing);
++  });
++
++  testWidgets('長輩按「停止分享」：先確認，確定後結束', (tester) async {
++    await tester.pumpWidget(app());
++    share();
++    await tester.pump();
++
++    await tester.tap(find.text('停止分享'));
++    await tester.pump();
++    expect(find.text('確定不讓 王小美 看你的畫面了嗎？'), findsOneWidget);
++    await tester.tap(find.text('取消'));
++    await tester.pump();
++    expect(service.active, isTrue);
++
++    await tester.tap(find.text('停止分享'));
++    await tester.pump();
++    await tester.tap(find.text('確定停止'));
++    await tester.pump();
++    expect(service.active, isFalse);
++    expect(find.text('停止分享'), findsNothing);
++  });
++
++  test('只接受無障礙輔助網頁送來的開始分享', () {
++    // 測試沒有指定 A11Y_URL，預設是 https://a11y.invalid/
++    expect(service.isTrustedOrigin(null), isFalse);
++    expect(service.isTrustedOrigin(WebUri('https://a11y.invalid')), isTrue);
++    expect(service.isTrustedOrigin(WebUri('https://evil.example')), isFalse);
++    expect(service.isTrustedOrigin(WebUri('http://a11y.invalid')), isFalse);
++  });
++}
++
++class _Counter extends StatefulWidget {
++  const _Counter();
++
++  @override
++  State<_Counter> createState() => _CounterState();
++}
++
++class _CounterState extends State<_Counter> {
++  int count = 0;
++
++  @override
++  Widget build(BuildContext context) {
++    return TextButton(key: const Key('counter'), onPressed: () => setState(() => count++), child: Text('按了 $count 次'));
++  }
++}

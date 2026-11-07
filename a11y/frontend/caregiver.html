@@ -41,9 +41,17 @@
         <button class="btn btn-secondary" type="button" data-action="scroll-up">往上</button>
         <button class="btn btn-secondary" type="button" data-action="scroll-down">往下</button>
         <button class="btn btn-secondary" type="button" data-action="go-back">上一頁</button>
+        <button id="btn-type" class="btn btn-primary watch-type" type="button" data-action="type-text" hidden>幫忙打字</button>
       </div>
       <div id="stage" class="stage">
         <p id="stage-empty" class="stage-empty"></p>
+        <!-- 台北通 App 拍下的整個畫面：網頁的部分是另外拍的截圖，疊在上面 -->
+        <div id="screen" class="screen" hidden>
+          <img id="screen-base" alt="" draggable="false">
+          <div id="screen-overlays"></div>
+          <span id="screen-tap" class="screen-tap" hidden></span>
+        </div>
+        <!-- 電腦測試的模擬服務頁：rrweb 重播網頁 -->
         <div id="replay" class="replay" hidden></div>
       </div>
       <p id="watch-hint" class="muted"></p>

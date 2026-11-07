@@ -63,8 +63,10 @@ class CareLink:
 
 @dataclass
 class ShareSession:
-    """被照顧者正在分享畫面。page 是目前打開的服務網頁；events 是從最近一次完整畫面開始的變化，
-    照顧者中途打開或重新整理時，用它把畫面補齊。"""
+    """被照顧者正在分享畫面。page 是目前的畫面（網頁或台北通 App）。
+    - 台北通 App：frame 是最近一次拍下的整個 App 畫面
+    - 電腦測試的模擬服務頁：events 是從最近一次完整畫面開始的 rrweb 變化
+    照顧者中途打開或重新整理時，用它們把畫面補齊。"""
     link_id: str
     token: str  # 被照顧者手機上的分享程式用這個連線
     created_at: datetime
@@ -72,6 +74,7 @@ class ShareSession:
     events: list = field(default_factory=list)
     events_bytes: int = 0
     snapshot_requested_at: datetime | None = None
+    frame: dict | None = None
 
 
 @dataclass

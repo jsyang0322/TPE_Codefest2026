@@ -250,6 +250,11 @@ def test_caregiver_command_reaches_elder_page(client, people):
 
 
 @pytest.mark.parametrize("body", [
+    {"action": "tap", "x": 10},
+    {"action": "tap", "x": 10, "y": 20000},
+    {"action": "tap", "x": -1, "y": 10},
+    {"action": "type"},
+    {"action": "type", "value": "字" * 501},
     {"action": "click"},
     {"action": "input", "node_id": 3},
     {"action": "input", "node_id": 3, "value": "字" * 501},
@@ -265,7 +270,7 @@ def test_only_caregiver_sends_commands_and_elder_must_be_on_page(client, people)
     link_id, token = start_share(client, people)
     body = {"action": "click", "node_id": 1}
     res = client.post(f"/api/share/{link_id}/commands", json=body, headers=people["care"])
-    assert res.status_code == 409 and res.json()["message"] == "王阿伯 現在沒有打開網頁服務，沒辦法操作。"
+    assert res.status_code == 409 and res.json()["message"] == "還看不到 王阿伯 的畫面，沒辦法操作。"
     with client.websocket_connect(f"/ws/share?token={token}") as agent:
         agent.receive_json()
         assert client.post(f"/api/share/{link_id}/commands", json=body, headers=people["elder"]).status_code == 403
@@ -302,7 +307,7 @@ def test_leaving_the_page_tells_caregiver(client, people):
             next_of(care_ws, "share_page")
         left = next_of(care_ws, "share_page")["data"]
         assert left["page"] is None
-        assert left["message"] == "王阿伯 現在沒有打開網頁服務。請他在台北通打開要辦的服務。"
+        assert left["message"] == "還看不到 王阿伯 的畫面。請他打開台北通的「無障礙輔助」，畫面就會出現。"
     assert client.get(f"/api/share/{link_id}", headers=people["care"]).json()["events"] == []
 
 
@@ -350,6 +355,91 @@ def test_sharing_keeps_elder_login_alive(client, people, clock):
 
 
 # ---- 停止分享 ----
+
+
+
+# ---- 台北通 App 分享整個畫面 ----
+
+PNG = "data:image/png;base64,iVBORw0KGgo="
+JPEG = "data:image/jpeg;base64,/9j/4AAQ"
+
+
+def app_frame(title="台北通", overlays=()):
+    return {"type": "frame", "width": 390, "height": 760, "image": PNG, "overlays": list(overlays), "title": title}
+
+
+def test_app_screen_reaches_caregiver(client, people):
+    link_id, token = start_share(client, people)
+    with client.websocket_connect(f"/ws?token={people['care_token']}") as care_ws, \
+            client.websocket_connect(f"/ws/share?token={token}") as app:
+        app.receive_json()
+        web = {"x": 0, "y": 56, "width": 390, "height": 704, "image": JPEG}
+        app.send_json(app_frame("申辦服務", [web]))
+
+        page = next_of(care_ws, "share_page")["data"]
+        assert page["page"] == {"url": "", "title": "申辦服務"}
+        frame = next_of(care_ws, "share_frame")["data"]["frame"]
+        assert frame == {"width": 390, "height": 760, "image": PNG, "overlays": [web], "title": "申辦服務"}
+
+        # 中途打開也拿得到最近的畫面
+        res = client.get(f"/api/share/{link_id}", headers=people["care"]).json()
+        assert res["frame"] == frame and res["events"] == []
+
+        # 照顧者點畫面上的位置
+        body = {"action": "tap", "x": 120.5, "y": 300}
+        assert client.post(f"/api/share/{link_id}/commands", json=body, headers=people["care"]).status_code == 200
+        command = next_of(app, "command")
+        assert command["action"] == "tap" and command["x"] == 120.5 and command["y"] == 300
+
+        body = {"action": "type", "value": "王大明"}
+        assert client.post(f"/api/share/{link_id}/commands", json=body, headers=people["care"]).status_code == 200
+        assert next_of(app, "command")["value"] == "王大明"
+
+        app.send_json({"type": "result", "command_id": command["command_id"], "ok": True, "message": "已按下「下一步」。"})
+        assert next_of(care_ws, "share_result")["data"]["message"] == "已按下「下一步」。"
+
+
+@pytest.mark.parametrize("frame", [
+    {"type": "frame", "width": 390, "height": 760, "title": "沒有圖片"},
+    {**app_frame(), "image": "javascript:alert(1)"},
+    {**app_frame(), "image": "https://evil.example/a.png"},
+    {**app_frame(), "width": 0},
+    {**app_frame(), "overlays": [{"x": 0, "y": 0, "width": 10, "height": 10, "image": "data:text/html;base64,PGgxPg=="}]},
+    {**app_frame(), "overlays": "不是清單"},
+])
+def test_bad_app_screens_are_ignored(client, people, frame):
+    link_id, token = start_share(client, people)
+    with client.websocket_connect(f"/ws/share?token={token}") as app:
+        app.receive_json()
+        app.send_json(frame)
+        app.send_json({"type": "ping"})
+        assert next_of(app, "pong")
+        res = client.get(f"/api/share/{link_id}", headers=people["care"]).json()
+        assert res["frame"] is None
+
+
+def test_app_screen_too_big_is_ignored(client, people, monkeypatch):
+    monkeypatch.setattr(config, "SHARE_FRAME_MAX_BYTES", 1000)
+    link_id, token = start_share(client, people)
+    with client.websocket_connect(f"/ws/share?token={token}") as app:
+        app.receive_json()
+        app.send_json({**app_frame(), "image": PNG + "A" * 2000})
+        app.send_json({"type": "ping"})
+        assert next_of(app, "pong")
+        assert client.get(f"/api/share/{link_id}", headers=people["care"]).json()["frame"] is None
+
+
+def test_app_disconnect_clears_screen(client, people):
+    link_id, token = start_share(client, people)
+    with client.websocket_connect(f"/ws?token={people['care_token']}") as care_ws:
+        with client.websocket_connect(f"/ws/share?token={token}") as app:
+            app.receive_json()
+            app.send_json(app_frame())
+            next_of(care_ws, "share_frame")
+        left = next_of(care_ws, "share_page")["data"]
+        assert left["page"] is None
+    res = client.get(f"/api/share/{link_id}", headers=people["care"]).json()
+    assert res["frame"] is None and res["page"] is None
 
 
 @pytest.mark.parametrize("how", ["revoke", "logout", "idle"])

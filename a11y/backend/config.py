@@ -34,5 +34,7 @@ VOICE_LISTEN_SECONDS = 8            # 系統問完問題後自動開麥克風的
 SHARE_BUFFER_MAX_BYTES = 4_000_000  # 後端最多暫存多少畫面資料；超過就請手機重新送一次完整畫面
 SHARE_SNAPSHOT_MIN_SECONDS = 10     # 兩次「請重新送完整畫面」之間至少隔幾秒
 SHARE_INPUT_MAX_LENGTH = 500        # 照顧者一次最多填幾個字
+SHARE_FRAME_MAX_BYTES = 6_000_000   # 台北通 App 拍下的一張畫面（含網頁截圖）最大多少
+SHARE_FRAME_MAX_OVERLAYS = 4        # 一張畫面最多疊幾張網頁截圖
 
 HOUSEKEEPING_INTERVAL_SECONDS = 5   # 背景工作多久執行一次

@@ -5,10 +5,10 @@
 | 功能 | 狀態 |
 | --- | --- |
 | A. 常見問題語音查詢：用講的問、用聽的聽答案 | 完成（電腦瀏覽器可測；台北通 App 內實測待做） |
-| B. 讓家人幫忙：家人看到長輩在台北通打開的服務畫面，並遠端幫忙點按、填寫 | 完成（電腦瀏覽器用模擬服務頁可測；台北通 App 內需要套用 `townpass/` 的修改） |
+| B. 讓家人幫忙：家人看到長輩**整個台北通的畫面**，並遠端幫忙點按、打字 | 完成（台北通 App 要套用 `townpass/` 的修改，iPhone 實測待做；電腦瀏覽器用模擬服務頁可測） |
 
 和 `web/`（AI 語音助手）是分開的服務，不共用程式碼。和台北通 App 溝通的訊息格式與 `web/src/bridge/` 相同。
-功能 A 只用 TownPass 已有的 Handler（`voice_listen`、`tts_speak`、`phone_call`）；功能 B 另外需要 `townpass/a11y-share.patch`（新增 2 個 Handler，見 [townpass/README.md](townpass/README.md)）。
+功能 A 只用 TownPass 已有的 Handler（`voice_listen`、`tts_speak`、`phone_call`）；功能 B 另外需要 `townpass/a11y-share.patch`（App 拍畫面、執行家人的操作，見 [townpass/README.md](townpass/README.md)）。
 
 ## 架構
 
@@ -25,20 +25,23 @@ frontend/*.html、js/*.js  ── GET /api/faq ──→ SQLite 資料庫 ←─
 讓家人幫忙（分享畫面）：
 
 ```
-長輩手機：台北通打開的服務網頁                後端                       家人手機：caregiver.html
-  分享程式（App 放進網頁）── 畫面變化 /ws/share ──→ 轉送、暫存最近的完整畫面 ── /ws ──→ rrweb 重播同一個畫面
-  執行點按、填寫  ←────────── 指令 ────────── POST /api/share/{id}/commands ←── 家人點畫面
+長輩手機：台北通 App                         後端                       家人手機：caregiver.html
+  拍下整個 App 的畫面 ── 畫面 /ws/share ──→ 轉送、暫存最近的畫面 ── /ws ──→ 顯示同一個畫面
+  在同一個位置點按、打字 ←───── 指令 ───── POST /api/share/{id}/commands ←── 家人點畫面
 ```
 
 1. 長輩產生 6 位數字碼（**5 分鐘**換一組、只能用一次；同一人輸入錯 5 次要等 1 分鐘），家人輸入後，長輩說或按「同意」。
-2. 長輩的頁面把「rrweb 錄製程式＋分享程式（`frontend/js/share-agent.js`）＋token」交給 App，
-   App 放進之後打開的每個服務網頁。電腦測試時，模擬服務頁（`frontend/demo/service.html`）自己載入分享程式。
-3. 分享程式用開源的 rrweb 記錄**頁面的結構與變化**（不是影片），手機與網路負擔都很小；密碼欄位不會被記錄。
-4. 家人點畫面上的按鈕，長輩的手機就按同一個按鈕，並標出位置、念出「王小美 按了『下一步』」；點輸入框可以幫忙填寫。
-5. **送出、付款、確認、申請、刪除**這類按鈕，長輩的手機會先問「王小美 想幫你按『送出申請』，同意嗎？」，同意才按。
-   這個問題顯示在長輩手機的封閉 Shadow DOM 裡，家人的指令點不到它。密碼欄位家人不能填。
-6. 長輩隨時可以按畫面下方的「停止分享」或說「停止分享」；登出、閒置 30 分鐘也會結束。
-7. 授權與分享狀態存在**後端記憶體**，不進資料庫；後端重開後要重新登入、重新綁定。
+2. 長輩的頁面把這次分享的 token 交給台北通 App。App 每秒檢查一次，畫面有變化才把**整個 App 的畫面**拍成圖片送出：
+   首頁、卡證、服務網頁都看得到（網頁部分用 WebView 的截圖補上）。沒有用 AI，不花 token，只用手機的效能和網路。
+3. 家人點畫面上的位置，長輩的手機就在同一個位置按一下，畫一個圈並念出「王小美 按了『下一步』」。
+   要填寫時，家人先點欄位，再按「幫忙打字」。
+4. **送出、付款、確認、申請、刪除**這類按鈕，長輩的手機會先問「王小美 想幫你按『送出申請』，同意嗎？」，同意才按。
+   這個問題不在拍下的畫面裡，問的時候家人的操作都不執行，所以家人按不到「同意」。密碼欄位家人不能填。
+5. 長輩隨時可以按畫面下方的「停止分享」；登出、閒置 30 分鐘也會結束。
+6. 授權與分享狀態存在**後端記憶體**，不進資料庫；後端重開後要重新登入、重新綁定。
+
+電腦瀏覽器沒有台北通 App，改用模擬服務頁（`frontend/demo/service.html`）測試：這一頁自己載入分享程式
+（`frontend/js/share-agent.js`，用開源的 rrweb 記錄網頁的變化），家人看到的是這一頁，操作方式相同。
 
 ## 執行
 
@@ -61,10 +64,11 @@ python -m venv .venv
 讓家人幫忙：開兩個瀏覽器視窗（`Ctrl`＋`N`）左右並排，一個「以王阿伯登入」、一個「以王小美登入」（登入存在 sessionStorage，兩個視窗互不影響）。
 王阿伯按「讓家人幫我」→ 王小美輸入數字碼 → 王阿伯按「同意」→ 王阿伯按「模擬服務頁（測試用）」→
 王小美按「看 王阿伯 的畫面」，點畫面上的欄位與按鈕。按「送出申請」時，王阿伯的視窗會先問他。
+（電腦上只能分享模擬服務頁；分享整個台北通的畫面要在手機上測，步驟見 [townpass/README.md](townpass/README.md)。）
 
 ## 部署（iPhone 的台北通只能連 https）
 
-**做法一：Cloud Run**（主辦單位建議，免費額度內）。在 `a11y/` 執行：
+**做法一：Cloud Run**（主辦單位建議，免費額度內；**分享整個台北通的畫面建議用這個**）。在 `a11y/` 執行：
 
 ```bash
 gcloud run deploy a11y --source . --region asia-east1 --allow-unauthenticated --max-instances 1 --timeout 3600
@@ -84,11 +88,13 @@ mkcert 192.168.1.23          # 換成 Mac 的區網 IP，產生 192.168.1.23.pem
 
 把 `$(mkcert -CAROOT)/rootCA.pem` 用 AirDrop 傳到 iPhone 安裝，再到「設定 → 一般 → 關於本機 → 憑證信任設定」打開它。
 TownPass 用 `--dart-define=A11Y_URL=https://192.168.1.23:8443/` 執行。
+注意：台北通 App 用 Dart 的 WebSocket 傳畫面，不一定接受 mkcert 的憑證；連不上時請改用做法一。
 
 ## 測試
 
 ```bash
 .venv/Scripts/python -m pytest          # 後端（綁定、分享畫面、遠端操作、停止分享、常見問題）
+# 台北通 App 的部分：套用 townpass/a11y-share.patch 後，在 TownPass 執行 fvm flutter test test/a11y_share_test.dart
 node --test "tests/js/*.test.js"        # 前端的搜尋、語音指令、朗讀文字（Node.js 22）
 ```
 

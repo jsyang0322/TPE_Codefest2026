@@ -146,10 +146,13 @@ function oneShot(name, data, timeoutMs) {
   });
 }
 
-/** 請 App 把分享程式放進之後打開的每個服務網頁。成功回傳 true；App 還沒加這個功能時回傳 false。 */
-export async function startShareInApp(script) {
+/**
+ * 請 App 開始分享整個台北通的畫面。config 是 { token, caregiver_name, elder_name }。
+ * 成功回傳 true；這個版本的台北通還沒有這個功能時回傳 false。
+ */
+export async function startShareInApp(config) {
   if (!inApp) return false;
-  return (await oneShot('a11y_share_start', { script }, 3000)) === true;
+  return (await oneShot('a11y_share_start', config, 3000)) === true;
 }
 
 export function stopShareInApp() {

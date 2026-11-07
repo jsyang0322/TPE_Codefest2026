@@ -33,8 +33,8 @@ def link_closed(elder: str, reason: str) -> str:
 
 
 def share_waiting(elder: str) -> str:
-    return f"{elder} 現在沒有打開網頁服務。請他在台北通打開要辦的服務。"
+    return f"還看不到 {elder} 的畫面。請他打開台北通的「無障礙輔助」，畫面就會出現。"
 
 
 def elder_not_on_page(elder: str) -> str:
-    return f"{elder} 現在沒有打開網頁服務，沒辦法操作。"
+    return f"還看不到 {elder} 的畫面，沒辦法操作。"

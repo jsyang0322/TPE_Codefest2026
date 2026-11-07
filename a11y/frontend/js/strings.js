@@ -62,6 +62,8 @@ export const C = {
   sharingTitle: (name) => `${name} 可以看你的畫面`,
   sharingDesc: (name) =>
     `請打開要辦的服務，${name} 會看到同一個畫面，也可以幫你點按、填寫。按到送出、付款這類重要按鈕前，會先問你。`,
+  sharingDescApp: (name) =>
+    `${name} 現在看得到你台北通的所有畫面，也可以幫你點按、打字。按到送出、付款這類重要按鈕前，會先問你。你可以離開這一頁，照常使用台北通；畫面下方的「停止分享」隨時可以按。`,
   sharingUnsupported: '這個版本的台北通還不能分享畫面，請更新台北通 App。',
   revokeTitle: (name) => `確定不讓 ${name} 看你的畫面了嗎？`,
   revokeAsk: (name) => `確定不讓 ${name} 看你的畫面了嗎？確定請說「確定」，不要請說「取消」。`,
@@ -77,6 +79,8 @@ export const C = {
   waitingElder: '已送出，請家人在他的手機上同意。',
   badCode: '請輸入 6 位數字。',
   inputTitle: (name) => `幫忙填寫「${name}」`,
+  typeTitle: '幫忙打字（會填進對方手機上選取的欄位）',
+  sendingType: '已請對方的手機填寫…',
   passwordBlocked: (elder) => `密碼請 ${elder} 自己輸入。`,
   sending: (label) => `已請對方的手機按「${label}」…`,
   sendingInput: (name) => `已請對方的手機填寫「${name}」…`,

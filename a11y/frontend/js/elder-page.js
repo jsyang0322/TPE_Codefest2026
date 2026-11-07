@@ -2,8 +2,8 @@
 //
 // - 產生 6 位數字碼（5 分鐘換一組）並念出來
 // - 家人輸入後，問「王小美 想看你的畫面、幫你操作，同意嗎？」
-// - 同意後開始分享：之後在台北通打開的服務網頁，家人都看得到，也能幫忙點按、填寫
-//   （分享程式由 App 放進服務網頁，見 share-script.js、share-agent.js）
+// - 同意後開始分享：家人看得到整個台北通的畫面，也能幫忙點按、打字
+//   （台北通 App 拍畫面、執行操作，見 a11y/townpass/；電腦測試用模擬服務頁，見 share-agent.js）
 // - 隨時可以說「停止分享」，或按「停止分享」
 // 看得到畫面的人用按鈕；看不到的人全程用語音。
 
@@ -195,7 +195,7 @@ async function enterSharing(link) {
 function renderSharing() {
   const { caregiverName, mode } = state.sharing;
   $('sharing-title').textContent = C.sharingTitle(caregiverName);
-  $('sharing-desc').textContent = C.sharingDesc(caregiverName);
+  $('sharing-desc').textContent = mode === 'app' ? C.sharingDescApp(caregiverName) : C.sharingDesc(caregiverName);
   $('sharing-warning').hidden = mode !== 'unsupported';
   $('sharing-warning').textContent = mode === 'unsupported' ? C.sharingUnsupported : '';
 
