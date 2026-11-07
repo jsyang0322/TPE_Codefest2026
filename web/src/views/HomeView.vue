@@ -38,7 +38,7 @@ const thinkingSecondsText = computed(() =>
     :class="assistant.choices.length ? 'pb-96' : 'pb-40'"
   >
     <!-- App 的標題列已經顯示服務名稱，這裡的標題給螢幕閱讀器用 -->
-    <h1 class="sr-only">AI 語音助手</h1>
+    <h1 class="sr-only">語音助手</h1>
 
     <!-- 沒有網路：AI 推論在手機上，仍可使用 -->
     <p v-if="!isOnline" class="tp-card flex gap-3 border-l-4 border-secondary-500 text-lg leading-relaxed" role="status">
