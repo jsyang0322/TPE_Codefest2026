@@ -84,7 +84,7 @@ const phaseIcon: Record<string, string> = {
         type="button"
         class="tp-btn-secondary justify-start text-left text-xl"
         :disabled="busy"
-        @click="assistant.runScript(script)"
+        @click="assistant.startScript(script)"
       >
         {{ script.description }}
       </button>

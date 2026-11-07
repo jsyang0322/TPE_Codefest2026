@@ -91,6 +91,11 @@ export const useAssistant = defineStore('assistant', {
     voiceUnavailable: false,
     /** 連續聽不懂的次數，第二次就顯示任務大按鈕 */
     misses: 0,
+    /**
+     * 使用者按了停止。stop() 只能讓「這一次」的朗讀、聆聽結束，流程本身還在 await 鏈上；
+     * 所以設這個旗標，say()、listen() 和各流程看到就收手。新的一輪（talk、任務按鈕）開始時重設。
+     */
+    cancelled: false,
   }),
 
   getters: {
@@ -142,6 +147,7 @@ export const useAssistant = defineStore('assistant', {
     },
 
     async say(text: string) {
+      if (this.cancelled) return;
       this.log.push({ role: 'assistant', text });
       this.caption = text;
       this.phase = 'speaking';
@@ -155,6 +161,7 @@ export const useAssistant = defineStore('assistant', {
 
     /** 聽一句話；失敗回傳空字串 */
     async listen(): Promise<string> {
+      if (this.cancelled) return '';
       this.phase = 'listening';
       this.caption = '';
       try {
@@ -173,6 +180,7 @@ export const useAssistant = defineStore('assistant', {
     /** 主按鈕：完整的一輪對話 */
     async talk() {
       if (this.phase !== 'idle') return this.stop();
+      this.cancelled = false;
 
       if (this.voiceUnavailable) {
         return this.say('這支手機目前沒辦法離線聽寫，請直接按下面的按鈕選擇要辦的事。');
@@ -185,11 +193,14 @@ export const useAssistant = defineStore('assistant', {
 
       this.phase = 'thinking';
       const intent = await understand(text);
+      if (this.cancelled) return; // 思考中按了停止
 
       if (intent.kind === 'question') {
         this.misses = 0;
         this.phase = 'thinking';
-        const reply = await answer(intent.question, (partial) => (this.caption = partial));
+        const reply = await answer(intent.question, (partial) => {
+          if (!this.cancelled) this.caption = partial;
+        });
         return this.say(reply);
       }
       if (intent.kind === 'unknown') {
@@ -217,6 +228,7 @@ export const useAssistant = defineStore('assistant', {
         while (!slots[key] && tries < 2) {
           await this.say(spec.ask);
           const reply = await this.listen();
+          if (this.cancelled) return false; // 按了停止：不再問
           // 先判斷「停止」「再說一次」，不是指令才當成答案（規則見 agent/keywords.ts）
           const command = reply ? matchCommand(reply) : null;
           if (command === 'stop') {
@@ -242,6 +254,7 @@ export const useAssistant = defineStore('assistant', {
       while (tries < 2) {
         await this.say(question);
         const reply = await this.listen();
+        if (this.cancelled) return false; // 按了停止：當成「不要」
         const command = reply ? matchCommand(reply) : null;
         if (command === 'stop') return false;
         if (command === 'repeat') continue; // 重念問題，不算一次嘗試
@@ -285,13 +298,20 @@ export const useAssistant = defineStore('assistant', {
         // 腳本的 stop 已改成短句「查詢完成」，App 端不會重複念到內容
         if (task.result) await this.say(task.result);
         const next = nextTask(script, result, slots);
-        if (next) await this.offerNext(next);
+        if (next && !this.cancelled) await this.offerNext(next);
       } catch (error) {
         const code = (error as { code?: string }).code;
         task.status = code === 'stopped' ? 'stopped' : 'failed';
         this.phase = 'idle';
         if (code === 'offline') await this.say('目前沒有網路，沒辦法打開服務頁。');
       }
+    },
+
+    /** 任務大按鈕：開始新的一輪 */
+    startScript(script: TaskScript) {
+      if (this.phase !== 'idle') return;
+      this.cancelled = false;
+      return this.runScript(script);
     },
 
     /** 清除對話紀錄 */
@@ -305,6 +325,7 @@ export const useAssistant = defineStore('assistant', {
 
     /** 任何時候都可以停 */
     stop() {
+      this.cancelled = true;
       bridge.stopListening();
       bridge.stopSpeaking();
       if (this.phase === 'running') bridge.stopTask();
