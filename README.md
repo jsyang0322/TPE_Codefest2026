@@ -49,8 +49,8 @@ flowchart LR
 
 | Repo | 內容 |
 | --- | --- |
-| [justin0322-pixel/TPE_Codefest2026](https://github.com/justin0322-pixel/TPE_Codefest2026)（本 repo） | 微服務網頁、後端 |
-| [justin0322-pixel/TownPass](https://github.com/justin0322-pixel/TownPass) | fork 自 [taipei-doit/TownPass](https://github.com/taipei-doit/TownPass)，加入本服務的 App 端修改 |
+| [jsyang0322/TPE_Codefest2026](https://github.com/jsyang0322/TPE_Codefest2026)（本 repo） | 微服務網頁、後端 |
+| [jsyang0322/TownPass](https://github.com/jsyang0322/TownPass) | fork 自 [taipei-doit/TownPass](https://github.com/taipei-doit/TownPass)，加入本服務的 App 端修改 |
 
 ```
 TPE_Codefest2026/
@@ -75,7 +75,7 @@ TPE_Codefest2026/
 ### 1. 城市通 App（TownPass fork）
 
 ```bash
-git clone https://github.com/justin0322-pixel/TownPass.git
+git clone https://github.com/jsyang0322/TownPass.git
 cd TownPass
 fvm install
 fvm flutter pub get

@@ -6,7 +6,7 @@
 
 - 2026 臺北秋季程式設計節 · 城市通微服務大黑客松參賽作品（競賽期間 2026/11/7–11/8）。
 - 作品是一個在城市通 App（台北通）WebView 中執行的**微服務網頁**，視需求搭配後端。
-- App 端修改放在另一個 repo：`justin0322-pixel/TownPass`（fork 自 `taipei-doit/TownPass`）。
+- App 端修改放在另一個 repo：`jsyang0322/TownPass`（fork 自 `taipei-doit/TownPass`）。
 - 得獎作品會由臺北市政府資訊局整併進城市通，程式碼要能讓別人接手：可移轉、可維運、可上架。
 
 ## 競賽規則（違反可能扣分或取消資格）
