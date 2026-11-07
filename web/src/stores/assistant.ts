@@ -85,6 +85,20 @@ let choiceResolve: ((text: string) => void) | null = null;
 let pendingChoice: string | null = null;
 /** 這一輪已經念過「好的，我想一下」：理解完接著問答時不再念一次 */
 let hintSpoken = false;
+/**
+ * 第幾輪對話。開始新的一輪或按停止時加一；等 LLM 回來後比對，不一樣就表示這輪已經被停掉，
+ * 結果直接丟掉。只靠 cancelled 不夠：停止後馬上再按說話，新的一輪會把 cancelled 設回 false。
+ */
+let turn = 0;
+/** think() 的計時器；放在這裡，stop() 才清得掉 */
+let thinkTimers: { tick: ReturnType<typeof setInterval>; hint: ReturnType<typeof setTimeout> } | null = null;
+
+function clearThinkTimers() {
+  if (!thinkTimers) return;
+  clearInterval(thinkTimers.tick);
+  clearTimeout(thinkTimers.hint);
+  thinkTimers = null;
+}
 
 /** 思考超過這麼久就先念一句，讓使用者知道助手有在做事 */
 const THINKING_HINT_MS = 2000;
@@ -249,6 +263,7 @@ export const useAssistant = defineStore('assistant', {
     async talk() {
       if (this.phase !== 'idle') return this.stop();
       this.cancelled = false;
+      const myTurn = ++turn;
 
       if (this.voiceUnavailable) {
         return this.say('這支手機目前沒辦法離線聽寫，請直接按下面的按鈕選擇要辦的事。');
@@ -261,15 +276,16 @@ export const useAssistant = defineStore('assistant', {
 
       hintSpoken = false;
       const intent = await this.think(understand(text));
-      if (this.cancelled) return; // 思考中按了停止
+      if (this.cancelled || myTurn !== turn) return; // 思考中按了停止
 
       if (intent.kind === 'question') {
         this.misses = 0;
         const reply = await this.think(
           answer(intent.question, (partial) => {
-            if (!this.cancelled) this.caption = partial;
+            if (!this.cancelled && myTurn === turn) this.caption = partial;
           }),
         );
+        if (myTurn !== turn) return;
         return this.say(reply);
       }
       if (intent.kind === 'unknown') {
@@ -288,22 +304,28 @@ export const useAssistant = defineStore('assistant', {
      * 用關鍵字就判斷出來的句子不會等到 2 秒，所以不會念。
      */
     async think<T>(work: Promise<T>): Promise<T> {
+      clearThinkTimers();
       this.phase = 'thinking';
       this.thinkingSeconds = 0;
       const started = Date.now();
-      const tick = setInterval(() => (this.thinkingSeconds = Math.floor((Date.now() - started) / 1000)), 1000);
-      const hint = setTimeout(() => {
-        if (this.phase !== 'thinking' || this.cancelled || hintSpoken) return;
-        hintSpoken = true;
-        // 不用 say()：它會把 phase 改成 speaking；這句也不放進對話紀錄
-        bridge.speak('好的，我想一下。').catch(() => {});
-      }, THINKING_HINT_MS);
+      const timers = {
+        tick: setInterval(() => (this.thinkingSeconds = Math.floor((Date.now() - started) / 1000)), 1000),
+        hint: setTimeout(() => {
+          if (this.phase !== 'thinking' || this.cancelled || hintSpoken) return;
+          hintSpoken = true;
+          // 不用 say()：它會把 phase 改成 speaking；這句也不放進對話紀錄
+          bridge.speak('好的，我想一下。').catch(() => {});
+        }, THINKING_HINT_MS),
+      };
+      thinkTimers = timers;
       try {
         return await work;
       } finally {
-        clearInterval(tick);
-        clearTimeout(hint);
-        this.thinkingSeconds = 0;
+        // 已經被 stop() 或下一輪換掉的話，不要動到下一輪的計時器和秒數
+        if (thinkTimers === timers) {
+          clearThinkTimers();
+          this.thinkingSeconds = 0;
+        }
       }
     },
 
@@ -412,6 +434,7 @@ export const useAssistant = defineStore('assistant', {
     startScript(script: TaskScript) {
       if (this.phase !== 'idle') return;
       this.cancelled = false;
+      turn += 1;
       return this.runScript(script);
     },
 
@@ -427,6 +450,9 @@ export const useAssistant = defineStore('assistant', {
     /** 任何時候都可以停 */
     stop() {
       this.cancelled = true;
+      turn += 1;
+      clearThinkTimers();
+      this.thinkingSeconds = 0;
       this.hideChoices();
       bridge.stopListening();
       bridge.stopSpeaking();

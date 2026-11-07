@@ -17,14 +17,17 @@ const busy = computed(() => assistant.phase !== 'idle');
 const micLabel = computed(() => (busy.value ? '停止' : '按這裡說話'));
 
 /** 有選項按鈕時，狀態列提醒也可以用按的 */
-const statusText = computed(() => {
-  if (assistant.choices.length && assistant.phase === 'listening') return '聆聽中，請說話或按下方按鈕';
-  // 等 LLM 時顯示已經等了幾秒，使用者知道助手沒有當掉
-  if (assistant.phase === 'thinking' && assistant.thinkingSeconds >= 2) {
-    return `${phaseLabel.thinking}（${assistant.thinkingSeconds} 秒）`;
-  }
-  return phaseLabel[assistant.phase];
-});
+const statusText = computed(() =>
+  assistant.choices.length && assistant.phase === 'listening' ? '聆聽中，請說話或按下方按鈕' : phaseLabel[assistant.phase],
+);
+
+/**
+ * 等 LLM 時顯示已經等了幾秒，使用者知道助手沒有當掉。
+ * 和 statusText 分開：狀態列是 aria-live，秒數放進去的話螢幕閱讀器會每秒念一次。
+ */
+const thinkingSecondsText = computed(() =>
+  assistant.phase === 'thinking' && assistant.thinkingSeconds >= 2 ? `（${assistant.thinkingSeconds} 秒）` : '',
+);
 </script>
 
 <template>
@@ -47,10 +50,9 @@ const statusText = computed(() => {
     <p
       class="tp-tag self-start"
       :class="busy ? 'bg-secondary-100 text-secondary-800' : 'bg-primary-100 text-primary-700'"
-      role="status"
-      aria-live="polite"
     >
-      {{ statusText }}
+      <span role="status" aria-live="polite">{{ statusText }}</span>
+      <span v-if="thinkingSecondsText" aria-hidden="true">{{ thinkingSecondsText }}</span>
     </p>
 
     <!-- 模型狀態：載入中提示進度；評審問「AI 在哪裡跑」時也看得到 -->
