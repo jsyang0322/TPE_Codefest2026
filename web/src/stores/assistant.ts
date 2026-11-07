@@ -4,7 +4,16 @@
 import { defineStore } from 'pinia';
 import { bridge } from '../bridge';
 import type { TaskScript } from '../bridge/types';
-import { answer, describeResult, matchCommand, normalizeSlot, understand } from '../agent';
+import {
+  answer,
+  describeResult,
+  matchCommand,
+  matchYesNo,
+  nextTask,
+  normalizeSlot,
+  understand,
+  type FollowUp,
+} from '../agent';
 import { isOnline } from '../composables/online';
 
 export type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'running';
@@ -72,12 +81,21 @@ export const useAssistant = defineStore('assistant', {
     log: (restored?.log ?? []) as LogEntry[],
     task: (restored?.task ?? null) as TaskProgress | null,
     llmState: 'loading' as 'missing' | 'loading' | 'ready' | 'unavailable',
-    /** 模型下載或載入進度（0–100），App 有提供時才有值 */
+    /** 模型下載進度（0–100），App 有提供時才有值；從手機檔案載入時是 0 */
     llmProgress: null as number | null,
+    /** App 回報的上次失敗原因（原始錯誤訊息，給隊員看，不念給使用者聽） */
+    llmMessage: null as string | null,
+    /** 正在輪詢 llm_status，避免重試按鈕連按開出好幾個輪詢 */
+    llmPolling: false,
     /** 裝置不支援離線語音辨識或沒有麥克風權限：改用任務大按鈕 */
     voiceUnavailable: false,
     /** 連續聽不懂的次數，第二次就顯示任務大按鈕 */
     misses: 0,
+    /**
+     * 使用者按了停止。stop() 只能讓「這一次」的朗讀、聆聽結束，流程本身還在 await 鏈上；
+     * 所以設這個旗標，say()、listen() 和各流程看到就收手。新的一輪（talk、任務按鈕）開始時重設。
+     */
+    cancelled: false,
   }),
 
   getters: {
@@ -85,29 +103,51 @@ export const useAssistant = defineStore('assistant', {
   },
 
   actions: {
+    /** 網頁一打開就預熱模型 */
+    init() {
+      return this.pollLlm();
+    },
+
     /**
-     * 網頁一打開就預熱模型。App 收到 llm_status 會立刻回目前狀態並在背景載入，
-     * 所以這裡每 2 秒問一次，直到 ready 或 missing（手機上沒有模型檔）。
+     * 每 2 秒送一次 llm_status，直到 ready 或 missing。
+     * App 收到 llm_status 會立刻回目前狀態並在背景載入（必要時下載），所以要輪詢。
+     * missing 代表下載或載入失敗（通常是沒網路），不是死路：retryLlm() 會重新開始。
      */
-    async init() {
-      const deadline = Date.now() + 10 * 60 * 1000;
-      while (Date.now() < deadline) {
-        try {
-          const { state, progress } = await bridge.llmStatus();
-          this.llmState = state;
-          this.llmProgress = progress;
-          if (state !== 'loading') return;
-        } catch {
-          // App 沒有 llm_status Handler（例如還沒合併）：當成模型不可用，改用關鍵字
-          this.llmState = 'unavailable';
-          return;
+    async pollLlm() {
+      if (this.llmPolling) return;
+      this.llmPolling = true;
+      try {
+        const deadline = Date.now() + 15 * 60 * 1000;
+        while (Date.now() < deadline) {
+          try {
+            const { state, progress, message } = await bridge.llmStatus();
+            this.llmState = state;
+            this.llmProgress = progress;
+            this.llmMessage = message;
+            if (state !== 'loading') return;
+          } catch {
+            // App 沒有 llm_status Handler（例如還沒合併）：當成模型不可用，改用關鍵字
+            this.llmState = 'unavailable';
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
         }
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        this.llmState = 'unavailable';
+      } finally {
+        this.llmPolling = false;
       }
-      this.llmState = 'unavailable';
+    },
+
+    /** 重試按鈕：再送一次 llm_status，App 會重新下載或載入模型 */
+    retryLlm() {
+      this.llmState = 'loading';
+      this.llmProgress = null;
+      this.llmMessage = null;
+      return this.pollLlm();
     },
 
     async say(text: string) {
+      if (this.cancelled) return;
       this.log.push({ role: 'assistant', text });
       this.caption = text;
       this.phase = 'speaking';
@@ -121,6 +161,7 @@ export const useAssistant = defineStore('assistant', {
 
     /** 聽一句話；失敗回傳空字串 */
     async listen(): Promise<string> {
+      if (this.cancelled) return '';
       this.phase = 'listening';
       this.caption = '';
       try {
@@ -139,6 +180,7 @@ export const useAssistant = defineStore('assistant', {
     /** 主按鈕：完整的一輪對話 */
     async talk() {
       if (this.phase !== 'idle') return this.stop();
+      this.cancelled = false;
 
       if (this.voiceUnavailable) {
         return this.say('這支手機目前沒辦法離線聽寫，請直接按下面的按鈕選擇要辦的事。');
@@ -151,11 +193,14 @@ export const useAssistant = defineStore('assistant', {
 
       this.phase = 'thinking';
       const intent = await understand(text);
+      if (this.cancelled) return; // 思考中按了停止
 
       if (intent.kind === 'question') {
         this.misses = 0;
         this.phase = 'thinking';
-        const reply = await answer(intent.question, (partial) => (this.caption = partial));
+        const reply = await answer(intent.question, (partial) => {
+          if (!this.cancelled) this.caption = partial;
+        });
         return this.say(reply);
       }
       if (intent.kind === 'unknown') {
@@ -169,45 +214,104 @@ export const useAssistant = defineStore('assistant', {
       await this.runScript(intent.script, intent.slots);
     },
 
-    /** 任務大按鈕或 talk() 呼叫：補齊關鍵字後執行腳本 */
-    async runScript(script: TaskScript, slots: Record<string, string> = {}) {
-      if (!isOnline.value) {
-        return this.say('目前沒有網路，沒辦法打開服務頁。您還是可以問我規定相關的問題。');
-      }
+    /** 開服務頁需要網路；沒有網路時說明並回傳 false。要在問使用者任何問題之前檢查 */
+    async ensureOnline(): Promise<boolean> {
+      if (isOnline.value) return true;
+      await this.say('目前沒有網路，沒辦法打開服務頁。您還是可以問我規定相關的問題。');
+      return false;
+    },
+
+    /** 缺什麼問什麼，直接改 slots；取消或兩次都聽不懂時回傳 false */
+    async fillSlots(script: TaskScript, slots: Record<string, string>): Promise<boolean> {
       for (const [key, spec] of Object.entries(script.slots)) {
         let tries = 0;
         while (!slots[key] && tries < 2) {
           await this.say(spec.ask);
           const reply = await this.listen();
+          if (this.cancelled) return false; // 按了停止：不再問
           // 先判斷「停止」「再說一次」，不是指令才當成答案（規則見 agent/keywords.ts）
           const command = reply ? matchCommand(reply) : null;
-          if (command === 'stop') return this.say('好的，先停在這裡，需要時再按按鈕叫我。');
-          if (command === 'repeat') continue; // 重念問題，不算聽不懂
+          if (command === 'stop') {
+            await this.say('好的，先停在這裡，需要時再按按鈕叫我。');
+            return false;
+          }
+          if (command === 'repeat') continue; // 回到迴圈開頭重念 spec.ask，不算一次嘗試
           const value = reply ? normalizeSlot(script, key, reply) : null;
           if (value) slots[key] = value;
           tries += 1;
         }
-        if (!slots[key]) return this.say('我還是沒聽清楚，我們晚一點再試一次。');
+        if (!slots[key]) {
+          await this.say('我還是沒聽清楚，我們晚一點再試一次。');
+          return false;
+        }
       }
+      return true;
+    },
+
+    /** 問是非題；說「對」回傳 true，說「不」、取消或兩次都聽不懂回傳 false */
+    async askYesNo(question: string): Promise<boolean> {
+      let tries = 0;
+      while (tries < 2) {
+        await this.say(question);
+        const reply = await this.listen();
+        if (this.cancelled) return false; // 按了停止：當成「不要」
+        const command = reply ? matchCommand(reply) : null;
+        if (command === 'stop') return false;
+        if (command === 'repeat') continue; // 重念問題，不算一次嘗試
+        const yesNo = reply ? matchYesNo(reply) : null;
+        if (yesNo) return yesNo === 'yes';
+        tries += 1;
+      }
+      return false;
+    },
+
+    /** 接續的腳本（例如繳費）：先問要不要做，補齊關鍵字，複誦確認後才執行 */
+    async offerNext(next: FollowUp) {
+      // 查詢後才斷網：先講清楚，不要等使用者說「確定」才發現不能繳
+      if (!isOnline.value) return this.say('目前沒有網路，沒辦法接著幫您處理，網路恢復後再跟我說。');
+      if (!(await this.askYesNo(next.ask))) return this.say('好的，需要的時候再跟我說。');
+      const slots = { ...next.slots };
+      if (!(await this.fillSlots(next.script, slots))) return;
+      if (!(await this.askYesNo(next.confirm(slots)))) return this.say('好的，先不幫您處理。');
+      await this.runScript(next.script, slots);
+    },
+
+    /** 任務大按鈕或 talk() 呼叫：補齊關鍵字後執行腳本；做完若有接續的腳本就接著問 */
+    async runScript(script: TaskScript, slots: Record<string, string> = {}) {
+      if (!(await this.ensureOnline())) return;
+      if (!(await this.fillSlots(script, slots))) return;
 
       this.task = { description: script.description, steps: [], status: 'running' };
+      // 用區域變數：執行途中 this.task 可能被 clear() 設成 null
+      const task = this.task;
       this.phase = 'running';
       try {
         const reply = await bridge.runTask(script, slots, (_step, say) => {
-          this.task!.steps.push(say);
+          task.steps.push(say);
           this.caption = say;
         });
         const result = (reply.result ?? {}) as Record<string, unknown>;
-        this.task.status = 'done';
-        this.task.result = describeResult(script.id, result);
+        task.status = 'done';
+        task.result = describeResult(script.id, result);
         this.phase = 'idle';
-        // 結果由 App 的 run_task 朗讀，網頁只顯示，不重念
+        // 摘要句（查到 N 筆共 X 元）只有網頁算得出來，由網頁念；
+        // 腳本的 stop 已改成短句「查詢完成」，App 端不會重複念到內容
+        if (task.result) await this.say(task.result);
+        const next = nextTask(script, result, slots);
+        if (next && !this.cancelled) await this.offerNext(next);
       } catch (error) {
         const code = (error as { code?: string }).code;
-        this.task.status = code === 'stopped' ? 'stopped' : 'failed';
+        task.status = code === 'stopped' ? 'stopped' : 'failed';
         this.phase = 'idle';
         if (code === 'offline') await this.say('目前沒有網路，沒辦法打開服務頁。');
       }
+    },
+
+    /** 任務大按鈕：開始新的一輪 */
+    startScript(script: TaskScript) {
+      if (this.phase !== 'idle') return;
+      this.cancelled = false;
+      return this.runScript(script);
     },
 
     /** 清除對話紀錄 */
@@ -221,6 +325,7 @@ export const useAssistant = defineStore('assistant', {
 
     /** 任何時候都可以停 */
     stop() {
+      this.cancelled = true;
       bridge.stopListening();
       bridge.stopSpeaking();
       if (this.phase === 'running') bridge.stopTask();

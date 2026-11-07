@@ -98,7 +98,33 @@ function describeStep(step: TaskStep, slots: Record<string, string>): string {
   if (step.click) return '點選畫面上的按鈕';
   if (step.fill) return '填寫欄位';
   if (step.read) return '讀取查詢結果';
+  if (step.wait) return '等待頁面出現';
   return '下一步';
+}
+
+// 各腳本 read 步驟讀回的資料，結構與 runner.js 在示範服務站實際讀回的相同（2026/11/7 實測），
+// 讓 agent/describe.ts 在瀏覽器裡也測得到。
+const MOCK_RESULTS: Record<string, Record<string, unknown>> = {
+  parking_fee: {
+    bills: [
+      { title: 'A1111111111', 繳費期限: '2024/12/31', 繳費金額: 'NT$60', 車號: 'ABC-123', 停車日期: '2024/11/14' },
+      { title: 'A2222222222', 繳費期限: '2025/01/14', 繳費金額: 'NT$150', 車號: 'ABC-123', 停車日期: '2024/11/15' },
+    ],
+  },
+  library_search: {
+    books: ['歡迎光臨錢天堂 : 神奇柑仔店大圖鑑', '神奇柑仔店. 15, 冒牌的長髮公主餅乾'],
+  },
+  counter_calling: {
+    counters: ['綜合受理|0379號 等候0', '自然人憑證|2023號 等候0', '護照一站式|3004號 等候2'],
+  },
+  parking_fee_pay: {
+    receipt: { 繳費項目: '停車費', 繳費日期: '2026/11/07', 付款方式: '{method}', 帳單總金額: 'NT$210' },
+  },
+};
+
+/** 假資料裡的 {method} 這類寫法換成這次的關鍵字 */
+function mockResult(scriptId: string, slots: Record<string, string>): Record<string, unknown> {
+  return JSON.parse(fillSlots(JSON.stringify(MOCK_RESULTS[scriptId] ?? {}), slots));
 }
 
 async function mockRunTask(data: Record<string, unknown>, options: RequestOptions): Promise<BridgeReply> {
@@ -111,7 +137,7 @@ async function mockRunTask(data: Record<string, unknown>, options: RequestOption
     options.onPartial?.({ status: 'partial', step: index, say: describeStep(step, slots) });
     await wait(900);
   }
-  return { status: 'done', result: { bills: '（瀏覽器模擬）查到 2 筆未繳停車費，共 60 元' } };
+  return { status: 'done', result: mockResult(script.id, slots) };
 }
 
 // ---- 進入點 ----
@@ -125,11 +151,15 @@ export function mockRequest(name: string, data: Record<string, unknown>, options
     case 'tts_speak':
       return mockSpeak(String(data.text ?? ''), data.rate as number | undefined);
     case 'llm_status':
-      // 模擬 App：前兩次回「載入中」，之後 ready，用來測網頁的輪詢
+      // 模擬 App：前兩次回「載入中」，之後 ready，用來測網頁的輪詢。
+      // 網址加 ?llm=missing 時，第一次回下載失敗，用來測重試按鈕。
       mockStatusCalls += 1;
+      if (mockStatusCalls === 1 && location.search.includes('llm=missing')) {
+        return Promise.resolve({ status: 'done', state: 'missing', message: 'SocketException: Failed host lookup（模擬）' });
+      }
       return Promise.resolve(
-        mockStatusCalls < 3
-          ? { status: 'done', state: 'loading', progress: mockStatusCalls * 40 }
+        mockStatusCalls < 3 || (location.search.includes('llm=missing') && mockStatusCalls < 4)
+          ? { status: 'done', state: 'loading', progress: mockStatusCalls * 30 }
           : { status: 'done', state: 'ready' },
       );
     case 'llm_ask':

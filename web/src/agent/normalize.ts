@@ -40,25 +40,69 @@ const OPTION_ALIASES: Record<string, string[]> = {
   區公所: ['公所'],
   稅捐處: ['稅捐', '繳稅'],
   就業服務站: ['就業', '找工作'],
+  悠遊付: ['悠遊卡', '悠遊'],
+  台北富邦信用卡: ['信用卡', '富邦', '刷卡'],
+  智慧支付平台: ['智慧支付'],
 };
 
+/** 這個位置前面緊接著否定詞，例如「不是汽車」的「汽車」 */
+function isNegated(text: string, index: number): boolean {
+  const before = text.slice(0, index).replace(/[\s，,、。]/g, '');
+  return /(不是|不要|不|沒有)$/.test(before);
+}
+
 /**
- * 從一句話挑出選項。說了好幾個時取最後說的那個，
- * 例如「不是汽車，是機車」→「機車」。
+ * 從一句話挑出選項。前面有否定詞的不算，剩下的取最後說的那個，
+ * 例如「不是汽車，是機車」「機車，不是汽車」都是「機車」。
  */
 export function matchOption(options: string[], text: string): string | null {
   let best: string | null = null;
   let bestIndex = -1;
   for (const option of options) {
     for (const word of [option, ...(OPTION_ALIASES[option] ?? [])]) {
-      const index = text.lastIndexOf(word);
-      if (index > bestIndex) {
-        best = option;
-        bestIndex = index;
+      for (let index = text.indexOf(word); index >= 0; index = text.indexOf(word, index + 1)) {
+        if (index > bestIndex && !isNegated(text, index)) {
+          best = option;
+          bestIndex = index;
+        }
       }
     }
   }
   return best;
+}
+
+// 查書時的前後綴。只放多字的說法：單字（「查」「書」）會切到書名，例如「查理與巧克力工廠」。
+const KEYWORD_PREFIXES = [
+  '我想要找', '我想要借', '我要找', '我想找', '幫我找', '幫我查', '我要借', '我想借', '我要查', '我想查',
+  '幫我搜尋', '搜尋一下', '找一下', '查一下', '圖書館', '有沒有', '我想要', '我要', '我想', '幫我', '請', '麻煩',
+];
+const KEYWORD_SUFFIXES = ['寫的書', '的書', '這本書', '那本書', '的作品', '的小說', '寫的', '嗎', '呢', '吧', '啊'];
+
+/** 只剩這些字表示沒說書名，例如「我要找書」 */
+const NOT_A_KEYWORD = /^(一本|本)?書$/;
+
+/** 書名或作者：「我要找東野圭吾的書」→「東野圭吾」。沒說書名回傳 null */
+export function extractKeyword(text: string): string | null {
+  const original = text.replace(/[。？?！!，,\s]+$/g, '').trim();
+  let keyword = original;
+  for (let changed = true; changed; ) {
+    changed = false;
+    keyword = keyword.replace(/^[，,、\s]+|[，,、\s]+$/g, '');
+    for (const prefix of KEYWORD_PREFIXES) {
+      if (keyword.startsWith(prefix) && keyword.length > prefix.length) {
+        keyword = keyword.slice(prefix.length);
+        changed = true;
+      }
+    }
+    for (const suffix of KEYWORD_SUFFIXES) {
+      if (keyword.endsWith(suffix) && keyword.length > suffix.length) {
+        keyword = keyword.slice(0, -suffix.length);
+        changed = true;
+      }
+    }
+  }
+  if (!keyword || NOT_A_KEYWORD.test(keyword)) return null;
+  return keyword;
 }
 
 /** 把一個欄位的值轉成腳本要的格式；不合格回傳 null */
@@ -67,7 +111,8 @@ export function normalizeSlot(script: TaskScript, key: string, value: string): s
   if (!spec) return null;
   if (spec.options) return matchOption(spec.options, value);
 
-  const normalized = key === 'plate' ? normalizePlate(value) : value.trim() || null;
+  const normalized =
+    key === 'plate' ? normalizePlate(value) : key === 'keyword' ? extractKeyword(value) : value.trim() || null;
   if (!normalized) return null;
   return spec.pattern && !new RegExp(spec.pattern).test(normalized) ? null : normalized;
 }

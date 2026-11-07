@@ -76,3 +76,13 @@ export function faqPrompt(faqs: FaqFile[]): string {
     sections.length ? sections.join('\n\n') : '（尚未放入）',
   ].join('\n');
 }
+
+/**
+ * 任務 B 失敗時要說的話。不能沒有回應：評審關網路出題時，最可能先問自由問題。
+ * code 是 llm_ask 回覆的錯誤碼（not_ready、busy、failed）或 bridge 的 timeout。
+ */
+export function fallbackAnswer(code?: string): string {
+  if (code === 'not_ready') return 'AI 還在準備中，請過一下再問我，或是撥 1999 詢問。';
+  if (code === 'busy') return '我還在想上一個問題，請稍等一下再問我。';
+  return '這個我不確定，可以幫您撥 1999 詢問。';
+}
