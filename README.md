@@ -92,8 +92,15 @@ App 開啟後，進入「服務 › 更多」，將本服務加入「我的服�
 
 ```bash
 cd web
-# TODO：安裝與啟動指令
+npm install      # 安裝套件（版本依 package-lock.json）
+npm run dev      # 開發伺服器，網址印在終端機；加了 --host，同一個 Wi-Fi 的手機也能開
+npm test         # 單元測試（node --test 直接跑 .ts，需要 Node.js 22.18 以上）
+npm run deploy   # 建置（型別檢查＋vite build）並部署到 Firebase Hosting 正式版
 ```
+
+- 在一般瀏覽器開啟時沒有城市通 App（`window.flutterObject`），語音、LLM、腳本執行都改用模擬（`web/src/bridge/mock.ts`），可直接在電腦上開發；網址加 `?llm=slow` 可模擬很慢的裝置端模型。
+- `npm run deploy:dev` 會部署到 Firebase 預覽頻道（7 天後失效），給還沒要上正式版的測試用。
+- 部署需要 Firebase 專案 `tpe-codefest2026` 的權限，先 `npx firebase-tools login`。
 
 ### 環境變數
 
@@ -105,11 +112,14 @@ cd web
 
 | 元件 | 平台 | 網址 |
 | --- | --- | --- |
-| 微服務網頁 | Firebase Hosting | <!-- TODO：https://xxx.web.app --> |
+| 微服務網頁 | Firebase Hosting | <https://tpe-codefest2026.web.app> |
 
 ```bash
-cd web && npm run build && firebase deploy --only hosting
+cd web && npm run deploy
 ```
+
+- 城市通 App 的服務入口（TownPass `lib/page/city_service/model/my_service_model.dart` 的 `destinationUrl`）指向上面的正式網址。
+- `web/firebase.json` 設定 `index.html` 不快取、`/assets/` 長期快取（檔名含內容雜湊），部署後重開 App 就會載入新版。
 
 ## 資料來源
 
@@ -130,7 +140,15 @@ cd web && npm run build && firebase deploy --only hosting
 
 | 套件 | 版本 | 授權 | 用途 | 使用位置 |
 | --- | --- | --- | --- | --- |
-| <!-- TODO --> | | | | web／App |
+| vue | 3.5.45 | MIT | 畫面框架 | web |
+| pinia | 4.1.0 | MIT | 狀態管理（對話流程、任務進度） | web |
+| vite | 8.3.6 | MIT | 開發伺服器與建置（開發用） | web |
+| @vitejs/plugin-vue | 6.0.10 | MIT | vite 編譯 .vue 檔（開發用） | web |
+| tailwindcss | 4.3.5 | MIT | 樣式（開發用，建置後輸出 CSS） | web |
+| @tailwindcss/vite | 4.3.5 | MIT | tailwindcss 的 vite 外掛（開發用） | web |
+| typescript | 5.9.3 | Apache-2.0 | 型別檢查（開發用） | web |
+| vue-tsc | 3.3.14 | MIT | .vue 檔的型別檢查（開發用） | web |
+| <!-- TODO：App 端套件（flutter_edge_ai 等） --> | | | | App |
 
 ## AI 使用聲明
 
