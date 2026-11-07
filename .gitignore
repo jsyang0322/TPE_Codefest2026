@@ -1,0 +1,45 @@
+# OS / IDE
+.DS_Store
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+service-account*.json
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Firebase
+.firebase/
+firebase-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Java / Spring Boot
+target/
+build/
+.gradle/
+*.class
+
+# On-device model files (multi-GB, distribute separately)
+*.gguf
+*.litertlm
+*.task
+*.tflite
+*.onnx
