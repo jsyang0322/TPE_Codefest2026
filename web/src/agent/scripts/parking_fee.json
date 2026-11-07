@@ -11,7 +11,8 @@
     { "click": { "text": "{vehicle}" } },
     { "fill": { "near": "AAA-8888", "value": "{plate}" }, "say": "輸入車號 {plate}" },
     { "click": { "text": "查詢" } },
-    { "read": { "selector": "TODO：PoC 時確認結果區塊", "as": "bills" } },
+    { "wait": { "text": "選擇帳單" } },
+    { "read": { "selector": "section .rounded.border", "all": true, "pairs": true, "as": "bills" } },
     { "stop": "查到的停車費已經列在畫面上。要繳費，請按畫面上的繳費按鈕。" }
   ]
 }

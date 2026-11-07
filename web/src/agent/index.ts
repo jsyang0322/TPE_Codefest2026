@@ -6,6 +6,8 @@ import { bridge } from '../bridge';
 import type { TaskScript } from '../bridge/types';
 import parkingFee from './scripts/parking_fee.json';
 
+export { describeResult } from './describe';
+
 export const scripts: Record<string, TaskScript> = {
   parking_fee: parkingFee as TaskScript,
 };
