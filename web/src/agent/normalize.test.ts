@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchOption, normalizePlate, normalizeSlot } from './normalize.ts';
+import { extractKeyword, matchOption, normalizePlate, normalizeSlot } from './normalize.ts';
 import type { TaskScript } from '../bridge/types.ts';
 
 test('車號：各種唸法', () => {
@@ -58,4 +58,34 @@ test('normalizeSlot：依腳本格式檢查', () => {
   assert.equal(normalizeSlot(script, 'plate', '6789W2'), null); // 不符 pattern
   assert.equal(normalizeSlot(script, 'vehicle', '機車'), '機車');
   assert.equal(normalizeSlot(script, 'unknown', 'x'), null);
+});
+
+test('選項：前面有否定詞的不算（review）', () => {
+  assert.equal(matchOption(['汽車', '機車'], '機車，不是汽車'), '機車');
+  assert.equal(matchOption(['汽車', '機車'], '不是汽車 是機車'), '機車');
+  assert.equal(matchOption(['汽車', '機車'], '不要汽車'), null);
+});
+
+test('查書關鍵字：去掉前後綴（review）', () => {
+  const cases: [string, string][] = [
+    ['我要找東野圭吾的書', '東野圭吾'],
+    ['幫我查哈利波特', '哈利波特'],
+    ['圖書館有沒有東野圭吾寫的書？', '東野圭吾'],
+    ['神奇柑仔店', '神奇柑仔店'],
+    ['查理與巧克力工廠', '查理與巧克力工廠'], // 單字「查」不能切
+  ];
+  for (const [input, expected] of cases) assert.equal(extractKeyword(input), expected, input);
+});
+
+test('查書關鍵字：沒說書名就回傳 null，讓流程再問一次', () => {
+  assert.equal(extractKeyword('我要找書'), null);
+  assert.equal(extractKeyword('幫我找一本書'), null);
+  assert.equal(extractKeyword(''), null);
+});
+
+test('選項：繳費方式的說法', () => {
+  const methods = ['悠遊付', '台北富邦信用卡', '智慧支付平台'];
+  assert.equal(matchOption(methods, '用悠遊卡'), '悠遊付');
+  assert.equal(matchOption(methods, '刷信用卡'), '台北富邦信用卡');
+  assert.equal(matchOption(methods, '智慧支付'), '智慧支付平台');
 });

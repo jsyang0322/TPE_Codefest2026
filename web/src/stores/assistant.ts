@@ -4,7 +4,16 @@
 import { defineStore } from 'pinia';
 import { bridge } from '../bridge';
 import type { TaskScript } from '../bridge/types';
-import { answer, describeResult, matchCommand, normalizeSlot, understand } from '../agent';
+import {
+  answer,
+  describeResult,
+  matchCommand,
+  matchYesNo,
+  nextTask,
+  normalizeSlot,
+  understand,
+  type FollowUp,
+} from '../agent';
 import { isOnline } from '../composables/online';
 
 export type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'running';
@@ -194,11 +203,15 @@ export const useAssistant = defineStore('assistant', {
       await this.runScript(intent.script, intent.slots);
     },
 
-    /** 任務大按鈕或 talk() 呼叫：補齊關鍵字後執行腳本 */
-    async runScript(script: TaskScript, slots: Record<string, string> = {}) {
-      if (!isOnline.value) {
-        return this.say('目前沒有網路，沒辦法打開服務頁。您還是可以問我規定相關的問題。');
-      }
+    /** 開服務頁需要網路；沒有網路時說明並回傳 false。要在問使用者任何問題之前檢查 */
+    async ensureOnline(): Promise<boolean> {
+      if (isOnline.value) return true;
+      await this.say('目前沒有網路，沒辦法打開服務頁。您還是可以問我規定相關的問題。');
+      return false;
+    },
+
+    /** 缺什麼問什麼，直接改 slots；取消或兩次都聽不懂時回傳 false */
+    async fillSlots(script: TaskScript, slots: Record<string, string>): Promise<boolean> {
       for (const [key, spec] of Object.entries(script.slots)) {
         let tries = 0;
         while (!slots[key] && tries < 2) {
@@ -206,30 +219,76 @@ export const useAssistant = defineStore('assistant', {
           const reply = await this.listen();
           // 先判斷「停止」「再說一次」，不是指令才當成答案（規則見 agent/keywords.ts）
           const command = reply ? matchCommand(reply) : null;
-          if (command === 'stop') return this.say('好的，先停在這裡，需要時再按按鈕叫我。');
-          if (command === 'repeat') continue; // 重念問題，不算聽不懂
+          if (command === 'stop') {
+            await this.say('好的，先停在這裡，需要時再按按鈕叫我。');
+            return false;
+          }
+          if (command === 'repeat') continue; // 回到迴圈開頭重念 spec.ask，不算一次嘗試
           const value = reply ? normalizeSlot(script, key, reply) : null;
           if (value) slots[key] = value;
           tries += 1;
         }
-        if (!slots[key]) return this.say('我還是沒聽清楚，我們晚一點再試一次。');
+        if (!slots[key]) {
+          await this.say('我還是沒聽清楚，我們晚一點再試一次。');
+          return false;
+        }
       }
+      return true;
+    },
+
+    /** 問是非題；說「對」回傳 true，說「不」、取消或兩次都聽不懂回傳 false */
+    async askYesNo(question: string): Promise<boolean> {
+      let tries = 0;
+      while (tries < 2) {
+        await this.say(question);
+        const reply = await this.listen();
+        const command = reply ? matchCommand(reply) : null;
+        if (command === 'stop') return false;
+        if (command === 'repeat') continue; // 重念問題，不算一次嘗試
+        const yesNo = reply ? matchYesNo(reply) : null;
+        if (yesNo) return yesNo === 'yes';
+        tries += 1;
+      }
+      return false;
+    },
+
+    /** 接續的腳本（例如繳費）：先問要不要做，補齊關鍵字，複誦確認後才執行 */
+    async offerNext(next: FollowUp) {
+      // 查詢後才斷網：先講清楚，不要等使用者說「確定」才發現不能繳
+      if (!isOnline.value) return this.say('目前沒有網路，沒辦法接著幫您處理，網路恢復後再跟我說。');
+      if (!(await this.askYesNo(next.ask))) return this.say('好的，需要的時候再跟我說。');
+      const slots = { ...next.slots };
+      if (!(await this.fillSlots(next.script, slots))) return;
+      if (!(await this.askYesNo(next.confirm(slots)))) return this.say('好的，先不幫您處理。');
+      await this.runScript(next.script, slots);
+    },
+
+    /** 任務大按鈕或 talk() 呼叫：補齊關鍵字後執行腳本；做完若有接續的腳本就接著問 */
+    async runScript(script: TaskScript, slots: Record<string, string> = {}) {
+      if (!(await this.ensureOnline())) return;
+      if (!(await this.fillSlots(script, slots))) return;
 
       this.task = { description: script.description, steps: [], status: 'running' };
+      // 用區域變數：執行途中 this.task 可能被 clear() 設成 null
+      const task = this.task;
       this.phase = 'running';
       try {
         const reply = await bridge.runTask(script, slots, (_step, say) => {
-          this.task!.steps.push(say);
+          task.steps.push(say);
           this.caption = say;
         });
         const result = (reply.result ?? {}) as Record<string, unknown>;
-        this.task.status = 'done';
-        this.task.result = describeResult(script.id, result);
+        task.status = 'done';
+        task.result = describeResult(script.id, result);
         this.phase = 'idle';
-        // 結果由 App 的 run_task 朗讀，網頁只顯示，不重念
+        // 摘要句（查到 N 筆共 X 元）只有網頁算得出來，由網頁念；
+        // 腳本的 stop 已改成短句「查詢完成」，App 端不會重複念到內容
+        if (task.result) await this.say(task.result);
+        const next = nextTask(script, result, slots);
+        if (next) await this.offerNext(next);
       } catch (error) {
         const code = (error as { code?: string }).code;
-        this.task.status = code === 'stopped' ? 'stopped' : 'failed';
+        task.status = code === 'stopped' ? 'stopped' : 'failed';
         this.phase = 'idle';
         if (code === 'offline') await this.say('目前沒有網路，沒辦法打開服務頁。');
       }
