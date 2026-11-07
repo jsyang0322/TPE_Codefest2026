@@ -35,6 +35,14 @@ test('選項：取最後說的那個、認得其他說法', () => {
   assert.equal(matchOption(['汽車', '機車'], '腳踏車'), null);
 });
 
+test('選項：機關簡稱', () => {
+  const offices = ['地政事務所', '戶政事務所', '區公所', '稅捐處', '就業服務站'];
+  assert.equal(matchOption(offices, '戶政'), '戶政事務所');
+  assert.equal(matchOption(offices, '我要去公所'), '區公所');
+  assert.equal(matchOption(offices, '中正區公所'), '區公所');
+  assert.equal(matchOption(offices, '找工作的地方'), '就業服務站');
+});
+
 const script: TaskScript = {
   id: 'parking_fee',
   description: '查詢路邊停車費',

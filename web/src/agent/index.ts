@@ -8,6 +8,8 @@
 
 import { bridge } from '../bridge';
 import type { TaskScript } from '../bridge/types';
+import counterCalling from './scripts/counter_calling.json';
+import librarySearch from './scripts/library_search.json';
 import parkingFee from './scripts/parking_fee.json';
 import { matchScript } from './keywords';
 import { matchOption } from './normalize';
@@ -20,6 +22,8 @@ export { normalizeSlot } from './normalize';
 
 export const scripts: Record<string, TaskScript> = {
   parking_fee: parkingFee as TaskScript,
+  library_search: librarySearch as TaskScript,
+  counter_calling: counterCalling as TaskScript,
 };
 
 /** web/src/data/faq/ 底下所有 JSON，建置時打包 */

@@ -17,6 +17,8 @@ const EXAMPLES: Record<string, [string, object][]> = {
     ['我要查 ABC 一二三這台機車的停車費', { task: 'parking_fee', slots: { vehicle: '機車', plate: 'ABC-123' } }],
     ['幫我查停車費', { task: 'parking_fee', slots: {} }],
   ],
+  library_search: [['圖書館有沒有東野圭吾的書', { task: 'library_search', slots: { keyword: '東野圭吾' } }]],
+  counter_calling: [['戶政事務所現在要等多久', { task: 'counter_calling', slots: { office: '戶政事務所' } }]],
 };
 
 function describeSlot(key: string, spec: TaskScript['slots'][string]): string {

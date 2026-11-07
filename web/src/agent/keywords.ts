@@ -33,7 +33,7 @@ export function matchYesNo(text: string): 'yes' | 'no' | null {
 const SCRIPT_KEYWORDS: Record<string, string[]> = {
   parking_fee: ['停車'],
   library_search: ['圖書館', '借書', '找書', '查書', '書'],
-  counter_calling: ['叫號', '排隊', '號碼牌', '輪到'],
+  counter_calling: ['叫號', '排隊', '號碼牌', '輪到', '等候', '等多久', '幾個人'],
 };
 
 /** 用關鍵字挑腳本；只回傳 scriptIds 裡有的（還沒寫好的腳本不會被挑到） */

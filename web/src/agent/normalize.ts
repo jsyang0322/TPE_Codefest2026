@@ -35,6 +35,11 @@ export function normalizePlate(text: string): string | null {
 const OPTION_ALIASES: Record<string, string[]> = {
   汽車: ['轎車', '小客車', '小汽車'],
   機車: ['摩托車', '重機', '速克達'],
+  地政事務所: ['地政'],
+  戶政事務所: ['戶政', '戶籍'],
+  區公所: ['公所'],
+  稅捐處: ['稅捐', '繳稅'],
+  就業服務站: ['就業', '找工作'],
 };
 
 /**

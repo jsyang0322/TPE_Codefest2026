@@ -26,10 +26,36 @@ function describeBills(bills: Bill[]): string {
   return deadlines.length ? `${sentence}，最早的期限是 ${toSpokenDate(deadlines[0])}。` : `${sentence}。`;
 }
 
+/** 書名去掉副題，唸起來比較短：「歡迎光臨錢天堂 : 神奇柑仔店大圖鑑」→「歡迎光臨錢天堂」 */
+function shortTitle(title: string): string {
+  return title.split(/\s[:=]\s/)[0].trim();
+}
+
+function describeBooks(books: string[]): string {
+  if (books.length === 0) return '沒有找到相關的書，可以換個書名或作者再試一次。';
+  const names = books.slice(0, 3).map((title) => `《${shortTitle(title)}》`).join('、');
+  return `找到 ${books.length} 本，有${names}${books.length > 3 ? '等' : ''}。`;
+}
+
+/** 櫃檯一列：「綜合受理|0379號 等候0」 */
+function describeCounters(counters: string[]): string {
+  const parts = counters.flatMap((row) => {
+    const match = row.match(/^(.+?)\s*\|\s*0*(\d+)號\s*等候\s*(\d+)/);
+    return match ? [`${match[1]}叫到 ${match[2]} 號，等候 ${match[3]} 人`] : [];
+  });
+  return parts.length ? `${parts.join('；')}。` : '目前查不到櫃檯的等候狀況。';
+}
+
 /** 依腳本 id 把結果轉成一句話；沒有專用規則的腳本，把文字結果串起來 */
 export function describeResult(scriptId: string, result: Record<string, unknown>): string {
   if (scriptId === 'parking_fee' && Array.isArray(result.bills)) {
     return describeBills(result.bills as Bill[]);
+  }
+  if (scriptId === 'library_search' && Array.isArray(result.books)) {
+    return describeBooks(result.books.map(String));
+  }
+  if (scriptId === 'counter_calling' && Array.isArray(result.counters)) {
+    return describeCounters(result.counters.map(String));
   }
   return Object.values(result)
     .filter((value) => typeof value === 'string' || typeof value === 'number')

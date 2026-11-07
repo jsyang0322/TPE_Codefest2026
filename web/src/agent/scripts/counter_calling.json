@@ -1,0 +1,18 @@
+{
+  "id": "counter_calling",
+  "description": "查詢臨櫃叫號與等候人數",
+  "slots": {
+    "office": {
+      "ask": "請問要查哪個機關？例如戶政事務所、區公所。",
+      "options": ["地政事務所", "戶政事務所", "區公所", "稅捐處", "就業服務站"]
+    }
+  },
+  "steps": [
+    { "open": "https://taipei-pass-service.vercel.app/counter-calling/" },
+    { "say": "正在幫您查詢等候人數" },
+    { "click": { "text": "{office}" }, "say": "打開{office}" },
+    { "wait": { "text": "櫃檯等候狀況" } },
+    { "read": { "selector": ".bg-grey-50.mb-4", "all": true, "as": "counters" } },
+    { "stop": "各櫃檯的叫號和等候人數已經列在畫面上。" }
+  ]
+}
