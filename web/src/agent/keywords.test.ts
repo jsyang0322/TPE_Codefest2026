@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchCommand, matchScript, matchYesNo } from './keywords.ts';
+import { looksLikeQuestion, matchCommand, matchScript, matchYesNo } from './keywords.ts';
 
 test('指令：停止、再說一次', () => {
   assert.equal(matchCommand('停止'), 'stop');
@@ -49,4 +49,12 @@ test('關鍵字挑腳本：不被「書」誤導、認得機關名稱（review�
   assert.equal(matchScript('戶政事務所現在幾號', all), 'counter_calling');
   assert.equal(matchScript('我要找東野圭吾的書', all), 'library_search');
   assert.equal(matchScript('秘書', all), null);
+});
+
+test('像不像問句', () => {
+  assert.equal(looksLikeQuestion('敬老卡怎麼辦'), true);
+  assert.equal(looksLikeQuestion('圖書館幾點關門'), true);
+  assert.equal(looksLikeQuestion('可以用悠遊卡嗎'), true);
+  assert.equal(looksLikeQuestion('今天天氣'), false);
+  assert.equal(looksLikeQuestion('隨便'), false);
 });

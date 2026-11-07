@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { faqPrompt, taskPrompt } from './prompts.ts';
+import { fallbackAnswer, faqPrompt, taskPrompt } from './prompts.ts';
 import type { TaskScript } from '../bridge/types.ts';
 
 const parking: TaskScript = {
@@ -37,4 +37,11 @@ test('FAQ 放進任務 B', () => {
 
 test('沒有 FAQ', () => {
   assert.ok(faqPrompt([]).includes('（尚未放入）'));
+});
+
+test('任務 B 失敗時的說明', () => {
+  assert.match(fallbackAnswer('not_ready'), /準備中/);
+  assert.match(fallbackAnswer('busy'), /稍等/);
+  assert.match(fallbackAnswer('timeout'), /1999/);
+  assert.match(fallbackAnswer(), /1999/);
 });

@@ -43,7 +43,7 @@ const SCRIPT_KEYWORDS: [string, string[]][] = [
     ['叫號', '排隊', '號碼牌', '輪到', '等候', '等多久', '幾個人', '幾號',
       '地政', '戶政', '戶籍', '區公所', '公所', '稅捐', '就業服務站'],
   ],
-  ['library_search', ['圖書館', '借書', '找書', '查書', '的書', '這本書', '書名', '作者', '館藏']],
+  ['library_search', ['圖書館', '借書', '想借', '要借', '借閱', '找書', '查書', '的書', '這本書', '書名', '作者', '館藏']],
 ];
 
 /** 用關鍵字挑腳本；只回傳 scriptIds 裡有的（還沒寫好的腳本不會被挑到） */
@@ -52,4 +52,11 @@ export function matchScript(text: string, scriptIds: string[]): string | null {
     if (scriptIds.includes(id) && words.some((word) => text.includes(word))) return id;
   }
   return null;
+}
+
+const QUESTION = /[?？]|嗎|呢|怎麼|怎樣|如何|多少|幾點|哪裡|哪裏|什麼|為什麼|可不可以|能不能|要不要|是不是/;
+
+/** 像不像問句；LLM 不可用時，用來決定交給規定問答還是回「聽不懂」 */
+export function looksLikeQuestion(text: string): boolean {
+  return QUESTION.test(text);
 }

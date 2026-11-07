@@ -14,9 +14,9 @@ import librarySearch from './scripts/library_search.json';
 import parkingFee from './scripts/parking_fee.json';
 import parkingFeePay from './scripts/parking_fee_pay.json';
 import { planFollowUp, type FollowUp } from './followup';
-import { matchScript } from './keywords';
+import { looksLikeQuestion, matchScript } from './keywords';
 import { matchOption } from './normalize';
-import { faqPrompt, taskPrompt, taskUserPrompt, type FaqFile } from './prompts';
+import { fallbackAnswer, faqPrompt, taskPrompt, taskUserPrompt, type FaqFile } from './prompts';
 import { parseTaskOutput } from './validate';
 
 export { describeResult } from './describe';
@@ -61,7 +61,8 @@ export type Intent =
 /** LLM 不可用或輸出不能用時，用關鍵字挑腳本；有說到的選項（汽車／機車）順便填上 */
 function keywordIntent(text: string): Intent {
   const id = matchScript(text, Object.keys(scripts));
-  if (!id) return { kind: 'unknown' };
+  // 像問句就交給任務 B：模型沒準備好時，answer() 會說明，而不是回「聽不懂」
+  if (!id) return looksLikeQuestion(text) ? { kind: 'question', question: text } : { kind: 'unknown' };
   const script = scripts[id];
   const slots: Record<string, string> = {};
   for (const [key, spec] of Object.entries(script.slots)) {
@@ -86,7 +87,12 @@ export async function understand(text: string): Promise<Intent> {
   return keywordIntent(text);
 }
 
-/** 規定問答（任務 B） */
+/** 規定問答（任務 B）；模型不可用或沒有回答時，回傳固定的說明，不丟例外 */
 export async function answer(question: string, onPartial?: (text: string) => void): Promise<string> {
-  return bridge.ask(faqPrompt(faqs), question, onPartial);
+  try {
+    const text = (await bridge.ask(faqPrompt(faqs), question, onPartial)).trim();
+    return text || fallbackAnswer();
+  } catch (error) {
+    return fallbackAnswer((error as { code?: string }).code);
+  }
 }
